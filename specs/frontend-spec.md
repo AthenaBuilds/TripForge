@@ -2,56 +2,107 @@
 
 ## 1. Overview
 <!-- Summary of the frontend application and its role. -->
+A React single-page application (SPA) that lets a logged-in user create trips and build their itineraries item by item, with the ability to export a trip as PDF or Excel. It is a responsive web app (desktop + mobile) that talks to the TripForge backend over a REST API (see api-contract-spec.md).
 
 ## 2. Tech Stack
 <!-- Framework, language, styling, state management, build tooling. -->
-- Framework:
-- Language:
-- Styling:
-- State management:
-- Build tool:
+- Framework: React 18
+- Language: TypeScript
+- Styling: Tailwind CSS
+- State management: TanStack Query (React Query) for server state; React Context for auth/session state; component-local `useState` for UI-only state
+- Build tool: Vite
+- Routing: React Router
 
 ## 3. Pages / Routes
 <!-- List every route/page with its purpose. -->
 | Route | Page | Description |
 |-------|------|-------------|
-|       |      |             |
+| `/` | Welcome | Page 1 — landing page showing the "TripForge" name, tagline "From Ideas to Itinerary," and the login/signup forms (toggle between the two) |
+| `/trips` | Trip Dashboard | Page 2 — entry point after login. Shows the user's existing trips, or an empty state ("No trips so far") if none exist. Above the "Add Trip" button, the user selects **Destination** and **From Date / To Date** for a new trip |
+| `/trips/new/itinerary` | New Trip — Itinerary Builder | Page 3 — opened by "Add Trip" on page 2, carrying the destination/dates just entered. Lets the user add itinerary items one by one for the whole trip, then **Save Trip** (persists trip + items) or **Export** (download as PDF/Excel) |
+| `/trips/:tripId` | Trip Itinerary | View/edit an existing trip's itinerary (same item-by-item builder as page 3, pre-filled); includes Export (PDF/Excel) and Delete Trip |
 
 ## 4. Components
 <!-- Key reusable components and their responsibilities. -->
--
+- `WelcomePanel` — displays the "TripForge" name and tagline "From Ideas to Itinerary" on page 1.
+- `AuthForm` — shared form for login/signup (fields, validation, submit, toggle between modes).
+- `NavBar` — top navigation, shows logged-in user, logout action.
+- `ProtectedRoute` — route wrapper that redirects to `/` if no authenticated session.
+- `TripList` / `TripCard` — renders the dashboard's list of existing trips.
+- `NewTripDetailsForm` — captures Destination + From Date/To Date on page 2, before "Add Trip" is clicked.
+- `ItineraryItemForm` — add one itinerary item at a time (activity, date/time, notes) on the itinerary builder.
+- `ItineraryItemList` / `ItineraryItemCard` — read-only display of added itinerary items, with edit/remove actions.
+- `ExportButton` — triggers export of a trip's itinerary as PDF or Excel.
+- `SaveTripButton` — persists the trip (destination, dates, itinerary items).
+- `LoadingSpinner` — shared loading indicator for async states.
+- `ErrorBanner` — shared inline error display for failed requests/form validation.
+- `EmptyState` — shared "nothing here yet" placeholder (no trips, no itinerary items).
 
 ## 5. User Flows
 <!-- Step-by-step flow through the UI for core use cases (link back to goal-spec use cases). -->
--
+- **Signup/Login**: user lands on `/` (Welcome) → toggles to signup or login in `AuthForm` → submits credentials → on success, redirected to `/trips`.
+- **View trips**: on `/trips`, see existing trips as `TripCard`s, or an `EmptyState` ("No trips so far") if none exist.
+- **Start a new trip**: on `/trips`, fill `NewTripDetailsForm` (Destination, From Date, To Date) → click "Add Trip" → navigates to `/trips/new/itinerary`, carrying the destination/dates along.
+- **Build itinerary (new trip)**: on `/trips/new/itinerary`, repeatedly fill `ItineraryItemForm` and add items one by one → each appears in `ItineraryItemList`.
+- **Save new trip**: click "Save Trip" → persists the trip (destination, dates, all itinerary items) → redirected to `/trips/:tripId`.
+- **Edit/remove itinerary item**: click edit/remove on an `ItineraryItemCard` (works the same on `/trips/new/itinerary` and `/trips/:tripId`) → update or confirm removal → list updates.
+- **View/edit an existing trip**: from `/trips`, click a `TripCard` → `/trips/:tripId` → shows destination, dates, and all itinerary items; items can be added, edited, or removed.
+- **Export**: from either itinerary builder (`/trips/new/itinerary` or `/trips/:tripId`), click "Export" → choose PDF or Excel → file downloads.
+- **Delete trip**: from `/trips/:tripId`, click "Delete Trip" → confirm → trip removed, redirected to `/trips`.
 
 ## 6. State Management
 <!-- What state is local vs global. How data is fetched/cached (e.g. React Query, Redux). -->
--
+- **Server state** (trips, itinerary items, current user) is fetched and cached via TanStack Query; mutations (create/edit/delete) invalidate the relevant query keys to keep views in sync.
+- **Auth/session state** (current user, auth token presence) lives in a React Context, set on login/signup and cleared on logout.
+- **New-trip draft state** (destination, from date, to date entered on `/trips`, and itinerary items added on `/trips/new/itinerary`) is held client-side (e.g. via navigation state or a draft context) until "Save Trip" persists it in one go — nothing is written to the backend before that point.
+- **UI-only state** (form inputs before submit, modal open/closed) stays local to the component via `useState`.
 
 ## 7. API Integration
 <!-- Which endpoints each page/component calls (link to api-contract-spec.md). -->
--
+Exact request/response shapes are defined in api-contract-spec.md. At a high level:
+- Welcome page calls `POST /auth/signup` and `POST /auth/login`.
+- Trip Dashboard calls `GET /trips`.
+- "Save Trip" (on `/trips/new/itinerary`) calls `POST /trips` with destination, dates, and the full list of itinerary items.
+- Trip Itinerary page (`/trips/:tripId`) calls `GET /trips/:tripId` and the itinerary-item endpoints (`POST` / `PATCH` / `DELETE /trips/:tripId/items/:itemId`) for incremental edits, plus `DELETE /trips/:tripId` for Delete Trip.
+- Export calls `GET /trips/:tripId/export?format=pdf|xlsx` and downloads the returned file.
 
 ## 8. UI/UX Requirements
 <!-- Design system, responsiveness, accessibility, theming. -->
--
+- Mobile-first responsive layout using Tailwind breakpoints; must be fully usable on a phone-sized viewport as well as desktop.
+- Simple, clean visual style — no custom design system beyond Tailwind's defaults for this version.
+- Typography: **Montserrat** for headings, **Open Sans** for body text (loaded via Google Fonts, configured as Tailwind `fontFamily` tokens — e.g. `font-heading` / `font-body`).
+- Forms use proper `<label>` elements and visible focus states; interactive elements are keyboard-navigable.
+- No dark mode requirement for MVP (can be a stretch item).
 
 ## 9. Error & Loading States
 <!-- How errors, empty states, and loading states are handled. -->
--
+- `LoadingSpinner` shown while a query/mutation is in flight (including while an export file is being generated).
+- `ErrorBanner` shown for failed API calls (network error, 4xx/5xx) with a human-readable message.
+- Inline field-level validation errors on forms (e.g. missing required field) shown before submit where possible.
+- `EmptyState` shown when a user has no trips yet ("No trips so far"), with a call-to-action to add one.
 
 ## 10. Authentication & Authorization (Frontend)
 <!-- Login/signup flows, protected routes, token storage. -->
--
+- Basic auth is required for the MVP — all `/trips*` routes are wrapped in `ProtectedRoute` and require a logged-in session.
+- Login/signup both live on the `/` Welcome page via `AuthForm` (toggle between modes) — there are no separate `/login`/`/signup` routes.
+- Token storage mechanism (httpOnly cookie vs. in-memory/localStorage) is decided alongside backend-spec.md's auth strategy — tracked as an open question below.
+- On 401 responses, the frontend clears the session and redirects to `/`.
+- Logout clears session state and redirects to `/`.
 
 ## 11. Performance Requirements
 <!-- Load time targets, lazy loading, code splitting. -->
--
+- No strict performance budget for this learning/portfolio project; reasonable defaults only.
+- Route-level code splitting via `React.lazy` for page components.
+- Avoid unnecessary re-renders (memoize list items where it matters); no premature optimization beyond that.
 
 ## 12. Testing Strategy
 <!-- Unit, integration, e2e tooling and coverage expectations. -->
--
+- Unit/component tests with Vitest + React Testing Library, focused on core components (`NewTripDetailsForm`, `ItineraryItemForm`, `ProtectedRoute`) and critical flows (add trip details, add itinerary item, save trip).
+- No end-to-end test suite for MVP; can be added later (e.g. Playwright) as a stretch item.
+- No formal coverage target — tests should cover the core use cases from goal-spec.md.
 
 ## 13. Open Questions
--
+- Token storage: httpOnly cookie vs. localStorage/in-memory — depends on backend-spec.md's auth approach.
+- How does the UI represent a multi-city trip, if goal-spec.md's open question resolves to "yes" for multi-city support?
+- Export generation: does the backend generate the PDF/Excel file (frontend just downloads it), or does the frontend generate it client-side (e.g. via `jspdf`/`xlsx` libraries)?
+- If the user navigates away from `/trips/new/itinerary` before clicking "Save Trip," is the draft (destination, dates, items entered so far) discarded, or should it persist (e.g. in `localStorage`) so it isn't lost?
