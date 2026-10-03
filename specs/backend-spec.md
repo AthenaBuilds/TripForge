@@ -8,7 +8,7 @@ A REST API server that owns all persistent TripForge data. It handles user signu
 <!-- Language, framework, runtime, hosting. -->
 - Language: TypeScript
 - Framework: Express
-- Runtime/Hosting: Node.js 20 LTS in a Docker container on **AWS** (ECS Fargate behind **Amazon API Gateway** HTTP API); see §14
+- Runtime/Hosting: Node.js 24 LTS (`node:24-alpine` base image) in a Docker container on **AWS** (ECS Fargate behind **Amazon API Gateway** HTTP API); see §14
 - ORM: Prisma
 - Validation: Zod (request bodies, params, and query strings)
 - Auth: `jsonwebtoken` + `bcrypt`
@@ -142,7 +142,7 @@ All pipelines run on **GitHub Actions**. The repo is a monorepo (`/client`, `/se
 | `infra` | `infra/**` | install → type-check → `cdk synth` → `cdk diff` against production, posted as a PR comment (read-only AWS role) |
 | `ci-ok` | always | Gate job that passes only when every job above passed or was skipped. Branch protection requires only this check, so path filtering doesn't block merges. |
 
-- Dependencies are cached through `actions/setup-node` (npm cache). Node 20 everywhere.
+- Dependencies are cached through `actions/setup-node` (npm cache). Node 24 everywhere: CI (`node-version: 24`), the Docker image, Vercel builds, and `engines.node: ">=24 <25"` in the root `package.json`, plus an `.nvmrc` file.
 
 **Backend CD — `.github/workflows/deploy-backend.yml`**
 - Trigger: the CI workflow completes successfully on `main` and the push changed `server/**` or `shared/**`. It can also be run manually (`workflow_dispatch`).

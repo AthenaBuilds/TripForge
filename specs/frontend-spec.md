@@ -11,6 +11,7 @@ A React single-page application (SPA) that lets a logged-in user create trips an
 - Styling: Tailwind CSS
 - State management: TanStack Query (React Query) for server state; React Context for auth/session state; component-local `useState` for UI-only state
 - Build tool: Vite
+- Node version: 24 LTS (set in the Vercel project settings and `.nvmrc`)
 - Routing: React Router
 
 ## 3. Pages / Routes
