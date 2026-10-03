@@ -171,4 +171,3 @@ All pipelines run on **GitHub Actions**. The repo is a monorepo (`/client`, `/se
 - GitHub stores only non-secret identifiers (the AWS account ID and the role ARN) as variables. App secrets stay in AWS Secrets Manager.
 
 ## 16. Open Questions
-- Should the frontend's unsaved-draft persistence (localStorage) have any backend counterpart? Proposed answer: no, drafts stay client-side only.

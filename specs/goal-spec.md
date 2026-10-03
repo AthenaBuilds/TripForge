@@ -64,6 +64,7 @@ Since this is a learning/portfolio project, success is measured by delivery and 
 - **2026-10-03 — Multi-city trips in MVP:** yes, in the simplest form. The trip `destination` is an overall label, and each itinerary item has an optional free-text `city`. There is no per-city date structure.
 - **2026-10-03 — Trip participant (viewer) role in MVP:** yes.
 - **2026-10-03 — How viewers get access:** a public share link (`/shared/:slug`) with an unguessable random slug. No login is needed. The owner can revoke the link, and revoking then sharing again issues a new link.
+- **2026-10-03 — Unsaved new-trip drafts:** auto-saved to `localStorage` (one per user), with Resume/Discard offered on the dashboard. Drafts are never stored on the backend (frontend-spec.md §6).
 
 ## 11. Open Questions
 <!-- Unresolved decisions to track. -->

@@ -60,7 +60,14 @@ A React single-page application (SPA) that lets a logged-in user create trips an
 <!-- What state is local vs global. How data is fetched/cached (e.g. React Query, Redux). -->
 - **Server state** (trips, itinerary items, current user) is fetched and cached via TanStack Query; mutations (create/edit/delete) invalidate the relevant query keys to keep views in sync.
 - **Auth/session state** (current user, auth token presence) lives in a React Context, set on login/signup and cleared on logout.
-- **New-trip draft state** (destination, from date, to date entered on `/trips`, and itinerary items added on `/trips/new/itinerary`) is held client-side (e.g. via navigation state or a draft context) until "Save Trip" persists it in one go — nothing is written to the backend before that point.
+- **New-trip draft state** (destination, from date, to date entered on `/trips`, and itinerary items added on `/trips/new/itinerary`) is held in a `DraftTripContext` and auto-saved to `localStorage` (debounced, ~500 ms) until "Save Trip" persists it in one go. Nothing is written to the backend before that point.
+  - Key: `tripforge:draft:<userId>`, so drafts are kept separate per user on shared devices. Value: `{ version: 1, destination, startDate, endDate, items, updatedAt }`.
+  - Only **one draft** per user at a time. Starting a new trip while a draft exists asks "Resume draft or start over?".
+  - On `/trips`, if a draft exists, a "Resume draft: <destination>" banner offers **Resume** (→ `/trips/new/itinerary`) and **Discard**.
+  - The draft is cleared on a successful Save Trip, on Discard, and on logout.
+  - Reloading `/trips/new/itinerary` restores the draft from `localStorage`. With no draft, the page redirects to `/trips`.
+  - All `localStorage` access is wrapped in try/catch. If storage is unavailable (e.g. private mode), drafts only live in memory and the app still works.
+  - Drafts that don't parse or have an unknown `version` are discarded.
 - **UI-only state** (form inputs before submit, modal open/closed) stays local to the component via `useState`.
 
 ## 7. API Integration
@@ -126,4 +133,3 @@ Exact request/response shapes are defined in api-contract-spec.md. All calls go 
 - Because the backend may deploy before or after the frontend, the frontend must tolerate extra, unknown fields in API responses. It relies only on fields defined in api-contract-spec.md.
 
 ## 15. Open Questions
-- If the user navigates away from `/trips/new/itinerary` before clicking "Save Trip," is the draft (destination, dates, items entered so far) discarded, or should it persist (e.g. in `localStorage`) so it isn't lost?
