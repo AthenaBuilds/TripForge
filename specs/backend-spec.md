@@ -8,7 +8,7 @@ A REST API server that owns all persistent TripForge data. It handles user signu
 <!-- Language, framework, runtime, hosting. -->
 - Language: TypeScript
 - Framework: Express
-- Runtime/Hosting: Node.js 20 LTS in a Docker container on **AWS** (ECS Fargate behind an Application Load Balancer); see §14
+- Runtime/Hosting: Node.js 20 LTS in a Docker container on **AWS** (ECS Fargate behind **Amazon API Gateway** HTTP API); see §14
 - ORM: Prisma
 - Validation: Zod (request bodies, params, and query strings)
 - Auth: `jsonwebtoken` + `bcrypt`
@@ -63,7 +63,7 @@ A REST API server that owns all persistent TripForge data. It handles user signu
 - There are no roles in the MVP: each user owns their own trips. Read-only sharing is a Phase 2 item.
 - **Same-origin via Vercel rewrite:** the SPA is hosted on Vercel and calls the API at the relative path `/api/*`. A Vercel rewrite (`vercel.json`) proxies `/api/:path*` to the AWS backend. From the browser's point of view, the cookie is first-party on the Vercel domain, so `SameSite=Lax` works and browsers that block third-party cookies (e.g. Safari) don't break login.
 - CORS: the browser never calls the backend's origin directly, so CORS is restricted to the Vercel production origin (and `http://localhost:5173` in local dev), with `credentials: true`. Locally, the Vite dev server proxies `/api` the same way.
-- Express sets `trust proxy` so it reads the client IP (for rate limiting) and the HTTPS scheme from `X-Forwarded-*` headers set by Vercel and the ALB.
+- Express sets `trust proxy` so it reads the client IP (for rate limiting) and the HTTPS scheme from `X-Forwarded-*` headers set by Vercel and API Gateway.
 
 ## 8. Third-Party Integrations
 <!-- External APIs/services (e.g. maps, weather, payments) and how they're used. -->
@@ -105,17 +105,18 @@ A REST API server that owns all persistent TripForge data. It handles user signu
 - **AWS production setup** (region e.g. `ap-south-1`):
   - **ECR** stores the backend Docker image.
   - **ECS Fargate** runs the service: 1 task (0.25 vCPU / 0.5 GB), in private subnets.
-  - **Application Load Balancer** terminates HTTPS with an **ACM** certificate for the API domain (e.g. `api.<domain>`) and forwards to the ECS task.
+  - **API Gateway (HTTP API)** is the public HTTPS entry point, using its default URL (`https://<api-id>.execute-api.<region>.amazonaws.com`). No custom domain or certificate is needed.
+  - A **VPC Link** connects API Gateway privately to the ECS service, which registers its tasks in **AWS Cloud Map** for service discovery. A single `ANY /{proxy+}` route forwards every request to Express. No load balancer is needed.
+  - API Gateway stage throttling (e.g. 50 req/s, burst 100) is a coarse backstop in front of the per-IP Express rate limits.
   - **RDS PostgreSQL** (`db.t4g.micro`, single-AZ) in private subnets; its security group allows port 5432 only from the ECS service.
   - **Secrets Manager** holds `DATABASE_URL` and `JWT_SECRET`, injected into the task as environment variables.
   - **CloudWatch Logs** collects the pino JSON logs from the container.
   - Infrastructure is defined as code with **AWS CDK (TypeScript)** in `/infra`.
 - **CI** (GitHub Actions): lint, type-check, and run tests (with a Postgres service container) on every push and pull request.
 - **CD** (GitHub Actions, on push to `main`): build the image → push to ECR → run `prisma migrate deploy` as a one-off ECS task → update the ECS service. GitHub authenticates to AWS via **OIDC** (no long-lived AWS keys in the repo).
-- `GET /health` returns `200` for ALB target health checks.
-- Cost note: the ALB and RDS are the main ongoing costs (RDS is covered by the free tier for the first 12 months on eligible accounts). Tear the stack down with `cdk destroy` when not in use.
+- `GET /health` returns `200` for ECS container health checks.
+- Cost note: RDS is the main ongoing cost (API Gateway HTTP API is billed per request and is negligible at this scale) (RDS is covered by the free tier for the first 12 months on eligible accounts). Tear the stack down with `cdk destroy` when not in use.
 
 ## 15. Open Questions
-- Custom domain: the ALB needs an ACM certificate, which needs a domain we control (for the `api.` subdomain). Do we buy one (e.g. via Route 53), or use a cheaper option such as API Gateway's default HTTPS URL in front of the service?
 - Should the frontend's unsaved-draft persistence (localStorage) have any backend counterpart? Proposed answer: no, drafts stay client-side only.
 - Will Phase 2 read-only sharing use a public share token on Trip (e.g. `shareSlug`) or per-user invitations?
