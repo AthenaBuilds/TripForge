@@ -47,7 +47,7 @@ Since this is a learning/portfolio project, success is measured by delivery and 
 - Single developer, built incrementally alongside spec work.
 - No fixed deadline; scope is intentionally small to stay achievable.
 - Must work well on both desktop and mobile via responsive web design — no native mobile app in this version.
-- Tech stack choices will be finalized in frontend-spec.md and backend-spec.md.
+- Hosting: frontend on Vercel, backend (API + PostgreSQL) on AWS — details in frontend-spec.md and backend-spec.md.
 - Assumes single-user ownership of a trip for this version; other participants are view-only (no shared editing permissions model needed yet).
 
 ## 9. Milestones / Phasing
