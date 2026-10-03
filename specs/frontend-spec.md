@@ -29,7 +29,10 @@ A React single-page application (SPA) that lets a logged-in user create trips an
 - `AuthForm` — shared form for login/signup (fields, validation, submit, toggle between modes).
 - `NavBar` — top navigation, shows logged-in user, logout action.
 - `ProtectedRoute` — route wrapper that redirects to `/` if no authenticated session.
-- `TripList` / `TripCard` — renders the dashboard's list of existing trips.
+- `TripList` / `TripCard` — renders the dashboard's trips in two sections, computed client-side using the user's local date:
+  - **Upcoming**: trips with `endDate >= today` (including ongoing trips), soonest first. This is the API order.
+  - **Past**: trips with `endDate < today`, most recent first (reversed).
+  - An empty section is hidden. `TripCard` shows the destination, the date range, a relative hint ("in 78 days" or "Ongoing"), the item count, and a "Shared" badge.
 - `NewTripDetailsForm` — captures Destination + From Date/To Date on page 2, before "Add Trip" is clicked. The Destination is the trip's overall label (placeholder: "e.g. Goa or South India").
 - `ItineraryItemForm` — add one itinerary item at a time (activity, date/time, city, location, notes) on the itinerary builder. The optional **City** field is pre-filled with the city of the most recently added item, so single-city trips need no extra typing. It suggests cities already used in this trip (`<datalist>`).
 - `ItineraryItemList` / `ItineraryItemCard` — read-only display of added itinerary items, grouped by day, with edit/remove actions. A card shows a small city badge when `city` is set. A day header lists the distinct cities for that day (e.g. "Dec 22 · Bengaluru → Mysuru").
@@ -44,7 +47,7 @@ A React single-page application (SPA) that lets a logged-in user create trips an
 ## 5. User Flows
 <!-- Step-by-step flow through the UI for core use cases (link back to goal-spec use cases). -->
 - **Signup/Login**: user lands on `/` (Welcome) → toggles to signup or login in `AuthForm` → submits credentials → on success, redirected to `/trips`.
-- **View trips**: on `/trips`, see existing trips as `TripCard`s, or an `EmptyState` ("No trips so far") if none exist.
+- **View trips**: on `/trips`, see existing trips as `TripCard`s grouped into Upcoming and Past, or an `EmptyState` ("No trips so far") if none exist.
 - **Start a new trip**: on `/trips`, fill `NewTripDetailsForm` (Destination, From Date, To Date) → click "Add Trip" → navigates to `/trips/new/itinerary`, carrying the destination/dates along.
 - **Build itinerary (new trip)**: on `/trips/new/itinerary`, repeatedly fill `ItineraryItemForm` and add items one by one → each appears in `ItineraryItemList`.
 - **Save new trip**: click "Save Trip" → persists the trip (destination, dates, all itinerary items) → redirected to `/trips/:tripId`.

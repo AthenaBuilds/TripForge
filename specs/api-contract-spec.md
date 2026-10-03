@@ -14,7 +14,7 @@
 - `PATCH` is a partial update: omitted fields are unchanged, and nullable fields are cleared by sending `null`.
 - Successful `DELETE` returns `204 No Content` with an empty body.
 - No pagination, filtering, or sorting parameters in the MVP. Lists are bounded (a user's trips; at most 200 items per trip) and returned in a fixed order:
-  - Trips: by `startDate` descending (upcoming and most recent first).
+  - Trips: by `startDate` ascending, then `createdAt`. The frontend splits the list into Upcoming and Past sections (frontend-spec.md §4).
   - Items: by `date`, then `startTime` (items with no time come first), then `createdAt`.
 - Unknown fields in request bodies are rejected with `400 VALIDATION_ERROR` (strict Zod schemas).
 
@@ -394,5 +394,4 @@ type ApiError = {
 - None.
 
 ## 10. Open Questions
-- The `GET /trips` order puts the newest `startDate` first. Should the dashboard instead split trips into "Upcoming" and "Past" sections (which could be done client-side from the same data)?
 - Should the response to a trip date change (`PATCH /trips/:tripId`) offer to move items that would fall outside the new range (e.g. shift all items by the same offset), instead of only rejecting with `ITEMS_OUT_OF_RANGE`? This is deferred for the MVP.
