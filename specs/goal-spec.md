@@ -48,6 +48,7 @@ Since this is a learning/portfolio project, success is measured by delivery and 
 - No fixed deadline; scope is intentionally small to stay achievable.
 - Must work well on both desktop and mobile via responsive web design — no native mobile app in this version.
 - Hosting: frontend on Vercel, backend (API + PostgreSQL) on AWS — details in frontend-spec.md and backend-spec.md.
+- CI/CD from day one: every change goes through a pull request with automated checks (lint, type-check, tests, build) before merging to `main`, and merges to `main` deploy automatically (backend-spec.md §15).
 - Assumes single-user ownership of a trip for this version; other participants are view-only (no shared editing permissions model needed yet).
 
 ## 9. Milestones / Phasing

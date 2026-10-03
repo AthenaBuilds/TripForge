@@ -107,8 +107,16 @@ Exact request/response shapes are defined in api-contract-spec.md. All calls go 
   - a rewrite from `/api/:path*` to the AWS backend (the API Gateway default URL, `https://<api-id>.execute-api.<region>.amazonaws.com/:path*`), so API calls and the auth cookie stay same-origin;
   - an SPA fallback rewrite from all other paths to `/index.html`, so React Router deep links (e.g. `/trips/123`) work on refresh.
 - No secrets live in the frontend. The backend URL is only in `vercel.json`, not in client code.
-- Preview deployments use different `*.vercel.app` origins. They still work because API calls go through each preview's own `/api` rewrite.
+- Preview deployments use different `*.vercel.app` origins. They still work because API calls go through each preview's own `/api` rewrite. Note: previews call the **production** backend, since there is no staging environment, so previews use real data.
 
-## 14. Open Questions
+## 14. CI
+- The `client` job in `.github/workflows/ci.yml` runs when `client/**` or `shared/**` changes: install → ESLint → `tsc --noEmit` → Vitest + React Testing Library → `vite build`. Full pipeline definition: backend-spec.md §15.
+- Vercel is the frontend CD:
+  - The Vercel project's **Root Directory** is `client`.
+  - An **Ignored Build Step** (`git diff --quiet HEAD^ HEAD -- . ../shared`) skips builds when nothing in the frontend or `/shared` changed.
+  - Production deploys from `main` wait for the GitHub `ci-ok` check before they are promoted.
+- Because the backend may deploy before or after the frontend, the frontend must tolerate extra, unknown fields in API responses. It relies only on fields defined in api-contract-spec.md.
+
+## 15. Open Questions
 - How does the UI represent a multi-city trip, if goal-spec.md's open question resolves to "yes" for multi-city support?
 - If the user navigates away from `/trips/new/itinerary` before clicking "Save Trip," is the draft (destination, dates, items entered so far) discarded, or should it persist (e.g. in `localStorage`) so it isn't lost?

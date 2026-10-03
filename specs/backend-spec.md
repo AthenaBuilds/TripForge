@@ -112,11 +112,54 @@ A REST API server that owns all persistent TripForge data. It handles user signu
   - **Secrets Manager** holds `DATABASE_URL` and `JWT_SECRET`, injected into the task as environment variables.
   - **CloudWatch Logs** collects the pino JSON logs from the container.
   - Infrastructure is defined as code with **AWS CDK (TypeScript)** in `/infra`.
-- **CI** (GitHub Actions): lint, type-check, and run tests (with a Postgres service container) on every push and pull request.
-- **CD** (GitHub Actions, on push to `main`): build the image → push to ECR → run `prisma migrate deploy` as a one-off ECS task → update the ECS service. GitHub authenticates to AWS via **OIDC** (no long-lived AWS keys in the repo).
+- CI/CD details are in §15.
 - `GET /health` returns `200` for ECS container health checks.
 - Cost note: RDS is the main ongoing cost (API Gateway HTTP API is billed per request and is negligible at this scale) (RDS is covered by the free tier for the first 12 months on eligible accounts). Tear the stack down with `cdk destroy` when not in use.
 
-## 15. Open Questions
+## 15. CI/CD
+All pipelines run on **GitHub Actions**. The repo is a monorepo (`/client`, `/server`, `/shared`, `/infra`), and each job runs only when its paths change.
+
+**Branch workflow**
+- `main` is protected: no direct pushes. All changes go through a pull request, and merging requires the required CI checks to pass.
+- Merges use squash-merge, giving one commit per pull request on `main`.
+
+**CI — `.github/workflows/ci.yml`** (runs on every pull request and every push to `main`)
+| Job | Runs when these paths change | Steps |
+|-----|------------------------------|-------|
+| `server` | `server/**`, `shared/**` | install → lint → type-check → `prisma migrate deploy` against a Postgres service container → Vitest (unit + Supertest integration) |
+| `client` | `client/**`, `shared/**` | install → lint → type-check → Vitest + React Testing Library → `vite build` |
+| `infra` | `infra/**` | install → type-check → `cdk synth` → `cdk diff` against production, posted as a PR comment (read-only AWS role) |
+| `ci-ok` | always | Gate job that passes only when every job above passed or was skipped. Branch protection requires only this check, so path filtering doesn't block merges. |
+
+- Dependencies are cached through `actions/setup-node` (npm cache). Node 20 everywhere.
+
+**Backend CD — `.github/workflows/deploy-backend.yml`**
+- Trigger: the CI workflow completes successfully on `main` and the push changed `server/**` or `shared/**`. It can also be run manually (`workflow_dispatch`).
+- Steps:
+  1. Build the Docker image, tagged with the git SHA.
+  2. Push the image to ECR.
+  3. Run `prisma migrate deploy` as a one-off ECS task using the new image. The deploy stops if the migration fails.
+  4. Update the ECS service to the new task definition and wait until the service is stable.
+  5. Smoke-test `GET /health` through the API Gateway URL.
+- AWS access uses GitHub **OIDC**: a deploy role scoped to ECR, ECS, and passing the task role. There are no long-lived AWS keys.
+- Uses a GitHub Environment named `production`, so deployments are tracked. Only one deploy runs at a time (`concurrency: deploy-backend`).
+- Rollback: re-run the workflow for the previous good SHA, or point the ECS service back to the previous task definition revision. ECS deployment circuit breaker with automatic rollback is turned on.
+
+**Infrastructure CD — `.github/workflows/deploy-infra.yml`**
+- Trigger: manual only (`workflow_dispatch`). Infrastructure changes (VPC, RDS, API Gateway) are rare and risky, so they are never applied automatically on merge.
+- Runs `cdk deploy` with the `production` GitHub Environment, which requires manual approval. The PR comment from the CI `infra` job shows the diff before approval.
+- The RDS instance has deletion protection and `RemovalPolicy.SNAPSHOT`, so a bad CDK change can't silently delete data.
+
+**Frontend CD** is handled by Vercel (see frontend-spec.md §13). Vercel waits for the GitHub `ci-ok` check before promoting a production deployment.
+
+**Deploy ordering and compatibility**
+- The frontend and backend deploy independently, so neither can assume the other has deployed first.
+- API changes must be **backward-compatible** (add fields or endpoints; never remove or rename them in the same release). The backend ships first, and the frontend starts using the change in a later pull request. Removals happen only after the frontend no longer uses the field or endpoint.
+- Database migrations must be **expand-then-contract**. Each migration must work with both the currently running code and the new code. Destructive changes (dropping or renaming columns) wait for a later release.
+
+**Secrets**
+- GitHub stores only non-secret identifiers (the AWS account ID and the role ARN) as variables. App secrets stay in AWS Secrets Manager.
+
+## 16. Open Questions
 - Should the frontend's unsaved-draft persistence (localStorage) have any backend counterpart? Proposed answer: no, drafts stay client-side only.
 - Will Phase 2 read-only sharing use a public share token on Trip (e.g. `shareSlug`) or per-user invitations?
