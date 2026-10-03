@@ -30,7 +30,7 @@ A REST API server that owns all persistent TripForge data. It handles user signu
 | Entity | Fields | Relationships |
 |--------|--------|----------------|
 | User | `id` (uuid, PK), `email` (unique, lowercased), `passwordHash`, `name`, `createdAt`, `updatedAt` | has many Trips |
-| Trip | `id` (uuid, PK), `userId` (FK), `destination` (string), `startDate` (date), `endDate` (date), `createdAt`, `updatedAt` | belongs to User; has many ItineraryItems (cascade delete) |
+| Trip | `id` (uuid, PK), `userId` (FK), `destination` (string), `startDate` (date), `endDate` (date), `shareSlug` (string, nullable, unique), `sharedAt` (timestamp, nullable), `createdAt`, `updatedAt` | belongs to User; has many ItineraryItems (cascade delete) |
 | ItineraryItem | `id` (uuid, PK), `tripId` (FK), `title` (string), `date` (date), `startTime` (`HH:mm`, nullable), `endTime` (`HH:mm`, nullable), `city` (nullable), `location` (nullable), `notes` (text, nullable), `createdAt`, `updatedAt` | belongs to Trip |
 
 - Dates are stored as calendar dates with no time zone, because itineraries are in the destination's local time. Times are stored as `HH:mm` strings.
@@ -45,7 +45,7 @@ A REST API server that owns all persistent TripForge data. It handles user signu
 <!-- Database choice, schema migrations strategy, indexing considerations. -->
 - Database: PostgreSQL 16 (Docker locally; **Amazon RDS for PostgreSQL** in production, in a private subnet reachable only from the ECS service)
 - Migration tool: Prisma Migrate (`prisma migrate dev` locally, `prisma migrate deploy` in CI/production)
-- Indexes: `User.email` (unique), `Trip.userId`, `ItineraryItem(tripId, date)`.
+- Indexes: `User.email` (unique), `Trip.shareSlug` (unique, nullable), `Trip.userId`, `ItineraryItem(tripId, date)`.
 - Foreign keys use `ON DELETE CASCADE` from Trip to ItineraryItem, so deleting a trip deletes its items.
 
 ## 6. Business Logic / Domain Rules
@@ -63,8 +63,14 @@ A REST API server that owns all persistent TripForge data. It handles user signu
 - Email and password signup/login. Passwords are hashed with bcrypt (cost factor 12) and must be at least 8 characters.
 - On signup or login, the server issues a JWT (`sub` = user id, 7-day expiry) in an **httpOnly** cookie with `Secure` (in production) and `SameSite=Lax`. This resolves the frontend's open question about token storage.
 - `POST /auth/logout` clears the cookie. `GET /auth/me` returns the current user so the SPA can restore the session when the page reloads.
-- `requireAuth` middleware protects all `/trips*` routes and returns 401 if the cookie is missing or invalid.
-- There are no roles in the MVP: each user owns their own trips. Read-only sharing is a Phase 2 item.
+- `requireAuth` middleware protects all `/trips*` routes and returns 401 if the cookie is missing or invalid. `/shared/*` routes are public.
+- Each user owns their own trips; only the owner can edit a trip.
+- **Read-only sharing (public link):**
+  - The owner can turn on sharing for a trip. This generates a `shareSlug`: 16 bytes from `crypto.randomBytes`, base64url-encoded (22 characters, 128 bits of entropy).
+  - Anyone with the link can call the unauthenticated `/shared/:slug` endpoints and gets a read-only view.
+  - Revoking sets `shareSlug` back to `null`, and the old link immediately returns 404. Sharing again always generates a new slug; an old slug is never reused.
+  - The public view never exposes `userId`, item IDs, the owner's email, or any internal timestamps other than `updatedAt`. It shows the owner's `name` as "Planned by …".
+  - Responses from `/shared/*` include the headers `X-Robots-Tag: noindex, nofollow`, `Cache-Control: no-store`, and `Referrer-Policy: no-referrer`, so shared trips aren't indexed by search engines or cached after revocation.
 - **Same-origin via Vercel rewrite:** the SPA is hosted on Vercel and calls the API at the relative path `/api/*`. A Vercel rewrite (`vercel.json`) proxies `/api/:path*` to the AWS backend. From the browser's point of view, the cookie is first-party on the Vercel domain, so `SameSite=Lax` works and browsers that block third-party cookies (e.g. Safari) don't break login.
 - CORS: the browser never calls the backend's origin directly, so CORS is restricted to the Vercel production origin (and `http://localhost:5173` in local dev), with `credentials: true`. Locally, the Vite dev server proxies `/api` the same way.
 - Express sets `trust proxy` so it reads the client IP (for rate limiting) and the HTTPS scheme from `X-Forwarded-*` headers set by Vercel and API Gateway.
@@ -87,7 +93,7 @@ A REST API server that owns all persistent TripForge data. It handles user signu
 <!-- Input validation, rate limiting, secrets management, data protection. -->
 - Every input is validated with Zod at the controller boundary. Prisma uses parameterized queries.
 - `helmet` sets security headers. The request body size limit is 100 KB.
-- Rate limiting (`express-rate-limit`): `/auth/*` allows 10 requests per minute per IP; the rest of the API allows 100 requests per minute per IP.
+- Rate limiting (`express-rate-limit`): `/auth/*` allows 10 requests per minute per IP; `/shared/*` allows 60 requests per minute per IP (this hinders slug guessing, which is already infeasible at 128 bits); the rest of the API allows 100 requests per minute per IP.
 - Secrets (`DATABASE_URL`, `JWT_SECRET`) come from environment variables. Only `.env.example` is committed.
 - Login failures return the same generic message whether the email or the password was wrong.
 
@@ -166,4 +172,3 @@ All pipelines run on **GitHub Actions**. The repo is a monorepo (`/client`, `/se
 
 ## 16. Open Questions
 - Should the frontend's unsaved-draft persistence (localStorage) have any backend counterpart? Proposed answer: no, drafts stay client-side only.
-- Will Phase 2 read-only sharing use a public share token on Trip (e.g. `shareSlug`) or per-user invitations?

@@ -130,6 +130,7 @@ On failure, `data` is `null`:
         "startDate": "2026-12-20",
         "endDate": "2026-12-24",
         "itemCount": 9,
+        "isShared": false,
         "createdAt": "2026-10-03T10:15:00.000Z",
         "updatedAt": "2026-10-03T10:15:00.000Z"
       }
@@ -262,6 +263,63 @@ On failure, `data` is `null`:
 - **Error cases:** `400 VALIDATION_ERROR` (missing or unknown `format`), `401 UNAUTHENTICATED`, `404 NOT_FOUND`. These errors still use the JSON envelope.
 - **Frontend note:** fetch the file as a Blob and trigger the download through an object URL, so the auth cookie is sent and errors can be shown in `ErrorBanner`.
 
+### 6.6 Sharing (owner)
+#### `POST /trips/:tripId/share`
+- **Description:** Turn on read-only link sharing. This call is idempotent: if the trip is already shared, it returns the existing slug, unchanged.
+- **Auth required:** Yes (owner)
+- **Request body:** none
+- **Response body (200 if already shared, 201 if newly created):**
+```json
+{ "data": { "shareSlug": "Q2x1ZGVfVHJpcEZvcmdl", "sharedAt": "2026-10-03T11:00:00.000Z" }, "error": null }
+```
+  The frontend builds the full URL as `${window.location.origin}/shared/${shareSlug}`.
+- **Error cases:** `401 UNAUTHENTICATED`, `404 NOT_FOUND`
+
+#### `DELETE /trips/:tripId/share`
+- **Description:** Revoke the share link. The old slug immediately stops working. Calling this on a trip that isn't shared still returns 204.
+- **Auth required:** Yes (owner)
+- **Response:** `204 No Content`
+- **Error cases:** `401 UNAUTHENTICATED`, `404 NOT_FOUND`
+- **Regenerating a link:** call `DELETE`, then `POST`. This always issues a new slug.
+
+### 6.7 Shared Trip (public, read-only)
+#### `GET /shared/:slug`
+- **Description:** The read-only view of a shared trip, for viewers with the link.
+- **Auth required:** No. No cookie is needed, and if one is sent it is ignored.
+- **Response body (200):**
+```json
+{
+  "data": {
+    "trip": {
+      "destination": "South India",
+      "startDate": "2026-12-20",
+      "endDate": "2026-12-28",
+      "ownerName": "Asha Rao",
+      "updatedAt": "2026-10-03T10:15:00.000Z",
+      "items": [
+        {
+          "title": "Lalbagh Botanical Garden",
+          "date": "2026-12-21",
+          "startTime": "10:00",
+          "endTime": "12:00",
+          "city": "Bengaluru",
+          "location": "Lalbagh",
+          "notes": null
+        }
+      ]
+    }
+  },
+  "error": null
+}
+```
+- **Response headers:** `X-Robots-Tag: noindex, nofollow`, `Cache-Control: no-store`, `Referrer-Policy: no-referrer`
+- **Error cases:** `404 NOT_FOUND` (the slug is unknown or revoked; the response doesn't say which), `429 RATE_LIMITED`
+
+#### `GET /shared/:slug/export`
+- **Description:** Viewers can download the PDF or Excel export. It works the same as `GET /trips/:tripId/export`: same `format` parameter, same files, same headers.
+- **Auth required:** No
+- **Error cases:** `400 VALIDATION_ERROR`, `404 NOT_FOUND`, `429 RATE_LIMITED`
+
 ## 7. Data Types / Schemas
 <!-- Shared schema definitions referenced by multiple endpoints. -->
 ```ts
@@ -278,11 +336,14 @@ type TripSummary = {
   startDate: string;     // YYYY-MM-DD
   endDate: string;       // YYYY-MM-DD, >= startDate, span ≤ 60 days
   itemCount: number;
+  isShared: boolean;     // a share link is active (dashboard badge)
   createdAt: string;
   updatedAt: string;
 };
 
-type TripDetail = Omit<TripSummary, "itemCount"> & {
+type TripDetail = Omit<TripSummary, "itemCount" | "isShared"> & {
+  shareSlug: string | null; // null = not shared
+  sharedAt: string | null;
   items: ItineraryItem[]; // sorted per §2
 };
 
@@ -303,6 +364,16 @@ type ItineraryItem = Required<ItineraryItemInput> & {
   updatedAt: string;
 };
 
+// Public read-only view (GET /shared/:slug). No ids, userId, email, or createdAt.
+type SharedTrip = {
+  destination: string;
+  startDate: string;
+  endDate: string;
+  ownerName: string;
+  updatedAt: string;
+  items: Array<Omit<ItineraryItem, "id" | "tripId" | "createdAt" | "updatedAt">>;
+};
+
 type ApiError = {
   code: string;               // see §5
   message: string;
@@ -314,6 +385,7 @@ type ApiError = {
 ## 8. Rate Limiting
 - Applied by Express per client IP (taken from `X-Forwarded-For`, with `trust proxy` set):
   - `/auth/signup` and `/auth/login`: 10 requests per minute.
+  - `/shared/*` (public): 60 requests per minute.
   - All other endpoints: 100 requests per minute.
 - When a limit is exceeded, the API returns `429 RATE_LIMITED` with a `Retry-After` header (in seconds) and the `RateLimit-*` headers (draft-7).
 - API Gateway stage throttling (50 req/s, burst 100) acts as a coarse global backstop. When it triggers, API Gateway returns its own `429` without our envelope; the frontend treats any 429 as "try again shortly".
@@ -324,4 +396,3 @@ type ApiError = {
 ## 10. Open Questions
 - The `GET /trips` order puts the newest `startDate` first. Should the dashboard instead split trips into "Upcoming" and "Past" sections (which could be done client-side from the same data)?
 - Should the response to a trip date change (`PATCH /trips/:tripId`) offer to move items that would fall outside the new range (e.g. shift all items by the same offset), instead of only rejecting with `ITEMS_OUT_OF_RANGE`? This is deferred for the MVP.
-- Phase 2 read-only sharing will likely add `POST /trips/:tripId/share` and a public `GET /shared/:slug`. The design is deferred.
