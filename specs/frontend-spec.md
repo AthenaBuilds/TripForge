@@ -29,9 +29,9 @@ A React single-page application (SPA) that lets a logged-in user create trips an
 - `NavBar` — top navigation, shows logged-in user, logout action.
 - `ProtectedRoute` — route wrapper that redirects to `/` if no authenticated session.
 - `TripList` / `TripCard` — renders the dashboard's list of existing trips.
-- `NewTripDetailsForm` — captures Destination + From Date/To Date on page 2, before "Add Trip" is clicked.
-- `ItineraryItemForm` — add one itinerary item at a time (activity, date/time, notes) on the itinerary builder.
-- `ItineraryItemList` / `ItineraryItemCard` — read-only display of added itinerary items, with edit/remove actions.
+- `NewTripDetailsForm` — captures Destination + From Date/To Date on page 2, before "Add Trip" is clicked. The Destination is the trip's overall label (placeholder: "e.g. Goa or South India").
+- `ItineraryItemForm` — add one itinerary item at a time (activity, date/time, city, location, notes) on the itinerary builder. The optional **City** field is pre-filled with the city of the most recently added item, so single-city trips need no extra typing. It suggests cities already used in this trip (`<datalist>`).
+- `ItineraryItemList` / `ItineraryItemCard` — read-only display of added itinerary items, grouped by day, with edit/remove actions. A card shows a small city badge when `city` is set. A day header lists the distinct cities for that day (e.g. "Dec 22 · Bengaluru → Mysuru").
 - `ExportButton` — triggers export of a saved trip's itinerary as PDF or Excel. Disabled (with a "Save the trip to export" hint) when there is no `tripId` yet.
 - `SaveTripButton` — persists the trip (destination, dates, itinerary items).
 - `LoadingSpinner` — shared loading indicator for async states.
@@ -118,5 +118,4 @@ Exact request/response shapes are defined in api-contract-spec.md. All calls go 
 - Because the backend may deploy before or after the frontend, the frontend must tolerate extra, unknown fields in API responses. It relies only on fields defined in api-contract-spec.md.
 
 ## 15. Open Questions
-- How does the UI represent a multi-city trip, if goal-spec.md's open question resolves to "yes" for multi-city support?
 - If the user navigates away from `/trips/new/itinerary` before clicking "Save Trip," is the draft (destination, dates, items entered so far) discarded, or should it persist (e.g. in `localStorage`) so it isn't lost?

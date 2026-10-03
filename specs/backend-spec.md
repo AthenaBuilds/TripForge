@@ -31,11 +31,15 @@ A REST API server that owns all persistent TripForge data. It handles user signu
 |--------|--------|----------------|
 | User | `id` (uuid, PK), `email` (unique, lowercased), `passwordHash`, `name`, `createdAt`, `updatedAt` | has many Trips |
 | Trip | `id` (uuid, PK), `userId` (FK), `destination` (string), `startDate` (date), `endDate` (date), `createdAt`, `updatedAt` | belongs to User; has many ItineraryItems (cascade delete) |
-| ItineraryItem | `id` (uuid, PK), `tripId` (FK), `title` (string), `date` (date), `startTime` (`HH:mm`, nullable), `endTime` (`HH:mm`, nullable), `location` (nullable), `notes` (text, nullable), `createdAt`, `updatedAt` | belongs to Trip |
+| ItineraryItem | `id` (uuid, PK), `tripId` (FK), `title` (string), `date` (date), `startTime` (`HH:mm`, nullable), `endTime` (`HH:mm`, nullable), `city` (nullable), `location` (nullable), `notes` (text, nullable), `createdAt`, `updatedAt` | belongs to Trip |
 
 - Dates are stored as calendar dates with no time zone, because itineraries are in the destination's local time. Times are stored as `HH:mm` strings.
 - Items are ordered by `date`, then `startTime` (items with no time come first), then `createdAt`. There is no manual ordering in the MVP.
-- MVP trips have a single free-text destination; multi-city is deferred (this resolves the goal-spec open question).
+- **Multi-city trips are supported in the MVP:**
+  - `Trip.destination` is a free-text label for the whole trip (e.g. "South India" or "Goa").
+  - Each item has an optional free-text `city` (e.g. "Mysuru"), which records where that activity happens.
+  - There is no separate Stop/City entity and no per-city date validation (decided 2026-10-03).
+  - `city` is distinct from `location`: `city` is the town, `location` is the specific place, such as a venue or address.
 
 ## 5. Database
 <!-- Database choice, schema migrations strategy, indexing considerations. -->
@@ -51,7 +55,7 @@ A REST API server that owns all persistent TripForge data. It handles user signu
 - An item's `date` must fall within its trip's `startDate`–`endDate`. If an item has both `startTime` and `endTime`, then `startTime <= endTime`.
 - When a trip's dates are changed, the update is rejected (`422`) if any existing item would fall outside the new range. Items are never silently deleted.
 - `POST /trips` creates the trip and all of its initial items in a **single transaction**: either everything is saved or nothing is.
-- Required string fields are trimmed and must not be empty. Length limits: destination ≤ 100, title ≤ 120, location ≤ 120, notes ≤ 1000.
+- Required string fields are trimmed and must not be empty. Length limits: destination ≤ 100, title ≤ 120, city ≤ 80, location ≤ 120, notes ≤ 1000.
 - A trip can have at most 200 items.
 
 ## 7. Authentication & Authorization

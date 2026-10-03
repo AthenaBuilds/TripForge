@@ -156,6 +156,7 @@ On failure, `data` is `null`:
       "date": "2026-12-20",
       "startTime": "14:00",
       "endTime": null,
+      "city": "Goa",
       "location": "Candolim",
       "notes": null
     }
@@ -212,6 +213,7 @@ On failure, `data` is `null`:
   "date": "2026-12-22",
   "startTime": "07:00",
   "endTime": "17:00",
+  "city": "Goa",
   "location": "Dudhsagar",
   "notes": "Book jeep safari in advance"
 }
@@ -255,8 +257,8 @@ On failure, `data` is `null`:
   - `Content-Disposition: attachment; filename="tripforge-<destination-slug>-<startDate>.<pdf|xlsx>"`
 - **File contents:**
   - Header: destination and date range.
-  - Body: items grouped by day, each with time range, title, location, and notes. Days with no items show "Nothing planned".
-  - Excel: one sheet with the columns Date, Day, Start, End, Title, Location, Notes.
+  - Body: items grouped by day, each with time range, title, city, location, and notes. Days with no items show "Nothing planned".
+  - Excel: one sheet with the columns Date, Day, Start, End, Title, City, Location, Notes.
 - **Error cases:** `400 VALIDATION_ERROR` (missing or unknown `format`), `401 UNAUTHENTICATED`, `404 NOT_FOUND`. These errors still use the JSON envelope.
 - **Frontend note:** fetch the file as a Blob and trigger the download through an object URL, so the auth cookie is sent and errors can be shown in `ErrorBanner`.
 
@@ -289,7 +291,8 @@ type ItineraryItemInput = {
   date: string;               // YYYY-MM-DD, within trip range, required
   startTime?: string | null;  // HH:mm
   endTime?: string | null;    // HH:mm, >= startTime when both set
-  location?: string | null;   // ≤ 120 chars
+  city?: string | null;       // ≤ 80 chars; free-text city/town for multi-city trips
+  location?: string | null;   // ≤ 120 chars; specific place (venue/address)
   notes?: string | null;      // ≤ 1000 chars
 };
 

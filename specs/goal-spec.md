@@ -57,8 +57,10 @@ Since this is a learning/portfolio project, success is measured by delivery and 
 - **Phase 2 (stretch, if time allows)**: Sharing a trip as read-only, basic trip list/dashboard polish.
 - **Future / explicitly deferred**: Collaboration, budgeting, recommendations, notifications (see Non-Goals).
 
-## 10. Open Questions
+## 10. Decisions Log
+- **2026-10-03 — Auth in MVP:** yes. Email/password login with a JWT in an httpOnly cookie (backend-spec.md §7).
+- **2026-10-03 — Multi-city trips in MVP:** yes, in the simplest form. The trip `destination` is an overall label, and each itinerary item has an optional free-text `city`. There is no per-city date structure.
+
+## 11. Open Questions
 <!-- Unresolved decisions to track. -->
-- Do we need authentication in the MVP, or can trips be anonymous/local to start, with auth added later?
-- Should a trip have a single destination or support multi-city trips in the MVP?
 - Now that solo travelers are in scope alongside groups/families, is the "trip participant" viewer role part of MVP, or deferred to Phase 2 along with sharing?
