@@ -53,7 +53,8 @@ A REST API server that owns all persistent TripForge data. It handles user signu
 - Every trip operation is scoped to `req.user.id`. Accessing a trip owned by another user returns **404** (not 403), so the API does not reveal that the trip exists.
 - `startDate <= endDate`, and a trip lasts at most 60 days.
 - An item's `date` must fall within its trip's `startDate`–`endDate`. If an item has both `startTime` and `endTime`, then `startTime <= endTime`.
-- When a trip's dates are changed, the update is rejected (`422`) if any existing item would fall outside the new range. Items are never silently deleted.
+- When a trip's dates are changed, the update is rejected (`422 ITEMS_OUT_OF_RANGE`) if any existing item would fall outside the new range. Items are never silently deleted.
+- If the request sets `shiftItems: true`, every item's date is first moved by `newStartDate − oldStartDate` days, in the same transaction as the trip update. The range check then runs on the shifted dates. See api-contract-spec.md `PATCH /trips/:tripId`.
 - `POST /trips` creates the trip and all of its initial items in a **single transaction**: either everything is saved or nothing is.
 - Required string fields are trimmed and must not be empty. Length limits: destination ≤ 100, title ≤ 120, city ≤ 80, location ≤ 120, notes ≤ 1000.
 - A trip can have at most 200 items.
@@ -171,3 +172,4 @@ All pipelines run on **GitHub Actions**. The repo is a monorepo (`/client`, `/se
 - GitHub stores only non-secret identifiers (the AWS account ID and the role ARN) as variables. App secrets stay in AWS Secrets Manager.
 
 ## 16. Open Questions
+- None currently. Resolved decisions are logged in goal-spec.md §10.

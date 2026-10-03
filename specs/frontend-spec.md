@@ -53,6 +53,9 @@ A React single-page application (SPA) that lets a logged-in user create trips an
 - **Save new trip**: click "Save Trip" → persists the trip (destination, dates, all itinerary items) → redirected to `/trips/:tripId`.
 - **Edit/remove itinerary item**: click edit/remove on an `ItineraryItemCard` (works the same on `/trips/new/itinerary` and `/trips/:tripId`) → update or confirm removal → list updates.
 - **View/edit an existing trip**: from `/trips`, click a `TripCard` → `/trips/:tripId` → shows destination, dates, and all itinerary items; items can be added, edited, or removed.
+- **Change trip dates**: edit the dates on `/trips/:tripId`.
+  - If the **start date moved** and the trip has items, a dialog asks: "Move all items with the trip (by N days)?" with the choices **Move items** (`shiftItems: true`) or **Keep item dates** (`shiftItems: false`).
+  - If the save is rejected with `ITEMS_OUT_OF_RANGE`, an `ErrorBanner` explains the problem and the listed items are highlighted, so the user can edit or remove them and try again.
 - **Export**: from `/trips/:tripId`, click "Export" → choose PDF or Excel → the backend generates the file → it downloads. On `/trips/new/itinerary`, Export is disabled until "Save Trip" succeeds (which redirects to `/trips/:tripId`, where Export is enabled).
 - **Share trip**: on `/trips/:tripId`, click "Share" → a link is created → click "Copy link" → send it to participants (WhatsApp, email, etc.). `TripCard` on the dashboard shows a "Shared" badge.
 - **View shared trip (participant)**: open `/shared/:slug` → read-only itinerary, with no login → optionally Export PDF/Excel.
@@ -136,3 +139,4 @@ Exact request/response shapes are defined in api-contract-spec.md. All calls go 
 - Because the backend may deploy before or after the frontend, the frontend must tolerate extra, unknown fields in API responses. It relies only on fields defined in api-contract-spec.md.
 
 ## 15. Open Questions
+- None currently. Resolved decisions are logged in goal-spec.md §10.

@@ -182,10 +182,17 @@ On failure, `data` is `null`:
 #### `PATCH /trips/:tripId`
 - **Description:** Update a trip's destination and/or dates.
 - **Auth required:** Yes
-- **Request body:** any subset of these fields (at least one is required):
+- **Request body:** any subset of `destination`, `startDate`, `endDate` (at least one is required), plus an optional `shiftItems` flag:
 ```json
-{ "destination": "North Goa", "startDate": "2026-12-19", "endDate": "2026-12-24" }
+{ "destination": "North Goa", "startDate": "2026-12-19", "endDate": "2026-12-24", "shiftItems": false }
 ```
+- **`shiftItems`** (boolean, default `false`):
+  - When `false`, items are left unchanged. If any item would fall outside the new range, the request is rejected with `ITEMS_OUT_OF_RANGE`.
+  - When `true`, every item's `date` is moved by the same offset: `offset = newStartDate − oldStartDate` (in days). Times, cities, and notes are unchanged. The range check then runs on the shifted dates.
+    - This handles "the trip moved": e.g. Dec 20–24 → Jan 10–14 moves every item by 21 days.
+    - If the new range is also shorter, items can still fall outside it. In that case the whole request is rejected with `ITEMS_OUT_OF_RANGE`, listing the items as they would be after the shift.
+  - `shiftItems: true` with no `startDate` change is a no-op (offset 0).
+  - The trip update and all item shifts happen in **one transaction**.
 - **Response body (200):** `{ "data": { "trip": TripDetail }, "error": null }`
 - **Error cases:**
   - `400 VALIDATION_ERROR`
@@ -196,6 +203,7 @@ On failure, `data` is `null`:
 ```json
 [{ "field": "items", "message": "2 items fall outside the new dates", "itemIds": ["…", "…"] }]
 ```
+  The frontend uses these `itemIds` to highlight the conflicting items.
 
 #### `DELETE /trips/:tripId`
 - **Description:** Delete a trip and all of its items.
@@ -394,4 +402,4 @@ type ApiError = {
 - None.
 
 ## 10. Open Questions
-- Should the response to a trip date change (`PATCH /trips/:tripId`) offer to move items that would fall outside the new range (e.g. shift all items by the same offset), instead of only rejecting with `ITEMS_OUT_OF_RANGE`? This is deferred for the MVP.
+- None currently. Resolved decisions are logged in goal-spec.md §10.
