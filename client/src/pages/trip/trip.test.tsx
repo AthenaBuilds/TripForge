@@ -72,48 +72,154 @@ describe('/trips/:tripId', () => {
     expect(await screen.findByText('Trip not found')).toBeInTheDocument();
   });
 
-  it('adds an item via the API, with City defaulting to the most recently added item', async () => {
+  it('holds item changes until Update Trip, then saves them all in one PUT', async () => {
     const { calls } = mockApi(
       tripRoutes({
-        [`POST /trips/${tripId}/items`]: (body) => {
-          const created = item('i3', { ...(body as object) });
-          trip = { ...trip, items: [...trip.items, created] };
-          return { status: 201, body: { item: created } };
+        [`PUT /trips/${tripId}/items`]: (body) => {
+          const sent = (body as { items: Array<Partial<ItineraryItem>> }).items;
+          trip = {
+            ...trip,
+            items: sent.map((i, n) => item(i.id ?? `i${n + 7}`, i)),
+          };
+          return { body: { trip } };
         },
       }),
     );
     const { user } = renderApp(`/trips/${tripId}`);
     const form = await screen.findByRole('form', { name: 'Add item' });
     expect(within(form).getByLabelText(/^City/)).toHaveValue('Candolim');
+    expect(screen.queryByRole('region', { name: 'Unsaved changes' })).not.toBeInTheDocument();
 
+    // Add one, edit one, remove one: nothing is sent yet.
     await user.type(within(form).getByLabelText('Activity'), 'Sunset cruise');
     await user.click(within(form).getByRole('button', { name: 'Add item' }));
-
-    expect(await screen.findByRole('article', { name: 'Sunset cruise' })).toBeInTheDocument();
-    expect(calls.find((c) => c.method === 'POST' && c.path.endsWith('/items'))?.body).toMatchObject(
-      {
-        title: 'Sunset cruise',
-        date: '2026-12-24',
-        city: 'Candolim',
-      },
+    expect(await screen.findByRole('article', { name: 'Sunset cruise' })).toHaveAttribute(
+      'data-status',
+      'new',
     );
+
+    await user.click(screen.getByRole('button', { name: 'Edit Check in' }));
+    const edit = screen.getByRole('form', { name: 'Edit item' });
+    await user.clear(within(edit).getByLabelText(/^Start time/));
+    await user.type(within(edit).getByLabelText(/^Start time/), '15:00');
+    await user.click(within(edit).getByRole('button', { name: 'Save item' }));
+    expect(screen.getByRole('article', { name: 'Check in' })).toHaveAttribute(
+      'data-status',
+      'edited',
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Remove Beach day' }));
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Remove' }));
+
+    const bar = screen.getByRole('region', { name: 'Unsaved changes' });
+    expect(bar).toHaveTextContent('3 unsaved changes · 1 added, 1 edited, 1 removed');
+    expect(screen.getByRole('button', { name: 'Edit trip details' })).toBeDisabled();
+    expect(calls.filter((c) => c.method !== 'GET')).toEqual([]);
+
+    await user.click(within(bar).getByRole('button', { name: 'Update Trip' }));
+    await waitFor(() =>
+      expect(screen.queryByRole('region', { name: 'Unsaved changes' })).not.toBeInTheDocument(),
+    );
+    expect(calls.filter((c) => c.method !== 'GET')).toEqual([
+      {
+        method: 'PUT',
+        path: `/trips/${tripId}/items`,
+        body: {
+          items: [
+            expect.objectContaining({ id: 'i1', title: 'Check in', startTime: '15:00' }),
+            expect.not.objectContaining({ id: expect.anything() }),
+          ],
+        },
+      },
+    ]);
+    expect(calls.at(-1)?.body).toMatchObject({
+      items: [{}, { title: 'Sunset cruise', city: 'Candolim' }],
+    });
+    expect(screen.getByRole('article', { name: 'Sunset cruise' })).not.toHaveAttribute(
+      'data-status',
+    );
+    expect(screen.getByRole('button', { name: 'Edit trip details' })).toBeEnabled();
   });
 
-  it('shows a server rejection in the add form and keeps the typed values', async () => {
+  it('Discard changes (confirmed) restores the saved itinerary', async () => {
+    mockApi(tripRoutes());
+    const { user } = renderApp(`/trips/${tripId}`);
+    await user.click(await screen.findByRole('button', { name: 'Remove Beach day' }));
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Remove' }));
+    expect(screen.queryByRole('article', { name: 'Beach day' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Discard changes' }));
+    await user.click(
+      within(screen.getByRole('dialog', { name: 'Discard your changes?' })).getByRole('button', {
+        name: 'Discard changes',
+      }),
+    );
+    expect(screen.getByRole('article', { name: 'Beach day' })).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Unsaved changes' })).not.toBeInTheDocument();
+  });
+
+  it('editing an item back to its saved values clears the unsaved state', async () => {
+    mockApi(tripRoutes());
+    const { user } = renderApp(`/trips/${tripId}`);
+    const rename = async (from: string, to: string) => {
+      await user.click(await screen.findByRole('button', { name: `Edit ${from}` }));
+      const form = screen.getByRole('form', { name: 'Edit item' });
+      await user.clear(within(form).getByLabelText('Activity'));
+      await user.type(within(form).getByLabelText('Activity'), to);
+      await user.click(within(form).getByRole('button', { name: 'Save item' }));
+    };
+    await rename('Check in', 'Check in!');
+    expect(screen.getByRole('region', { name: 'Unsaved changes' })).toBeInTheDocument();
+    await rename('Check in!', 'Check in');
+    expect(screen.queryByRole('region', { name: 'Unsaved changes' })).not.toBeInTheDocument();
+  });
+
+  it('keeps changes and names the item when Update Trip is rejected', async () => {
     mockApi(
       tripRoutes({
-        [`POST /trips/${tripId}/items`]: {
+        [`PUT /trips/${tripId}/items`]: {
           status: 422,
-          body: { code: 'ITEM_LIMIT_REACHED', message: 'A trip can have at most 200 items' },
+          body: { code: 'ITEM_LIMIT_REACHED', message: 'items[2]: something is wrong' },
         },
       }),
     );
     const { user } = renderApp(`/trips/${tripId}`);
     const form = await screen.findByRole('form', { name: 'Add item' });
-    await user.type(within(form).getByLabelText('Activity'), 'One too many');
+    await user.type(within(form).getByLabelText('Activity'), 'Sunset cruise');
     await user.click(within(form).getByRole('button', { name: 'Add item' }));
-    expect(await within(form).findByRole('alert')).toHaveTextContent('at most 200 items');
-    expect(within(form).getByLabelText('Activity')).toHaveValue('One too many');
+    await user.click(screen.getByRole('button', { name: 'Update Trip' }));
+
+    const bar = screen.getByRole('region', { name: 'Unsaved changes' });
+    expect(await within(bar).findByRole('alert')).toHaveTextContent(
+      '"Sunset cruise": something is wrong',
+    );
+    expect(screen.getByRole('article', { name: 'Sunset cruise' })).toHaveAttribute(
+      'data-status',
+      'new',
+    );
+  });
+
+  it('asks before leaving the page with unsaved changes', async () => {
+    mockApi(tripRoutes());
+    const { user } = renderApp(`/trips/${tripId}`);
+    await user.click(await screen.findByRole('button', { name: 'Remove Beach day' }));
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Remove' }));
+
+    await user.click(screen.getByRole('link', { name: '← Your trips' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Leave without saving?' });
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    expect(location()).toBe(`/trips/${tripId}`);
+
+    await user.click(screen.getByRole('link', { name: '← Your trips' }));
+    await user.click(
+      within(await screen.findByRole('dialog', { name: 'Leave without saving?' })).getByRole(
+        'button',
+        {
+          name: 'Leave without saving',
+        },
+      ),
+    );
+    await waitFor(() => expect(location()).toBe('/trips'));
   });
 
   it('asks whether to move items when the start date moves, then sends shiftItems', async () => {
@@ -283,5 +389,38 @@ describe('ShareTripPanel', () => {
       'POST',
       'DELETE',
     ]);
+  });
+});
+
+describe('editing an ongoing trip (today: 2026-10-10)', () => {
+  it('keeps an unchanged past start date but rejects moving it into the past', async () => {
+    trip = { ...trip, startDate: '2026-10-08', endDate: '2026-10-12', items: [] };
+    const { calls } = mockApi(
+      tripRoutes({
+        [`PATCH /trips/${tripId}`]: (body) => ({
+          body: { trip: { ...trip, ...(body as object) } },
+        }),
+      }),
+    );
+    const { user } = renderApp(`/trips/${tripId}`);
+    await user.click(await screen.findByRole('button', { name: 'Edit trip details' }));
+    expect(screen.getByLabelText('From Date')).toHaveAttribute('min', '2026-10-08');
+
+    await user.clear(screen.getByLabelText('From Date'));
+    await user.type(screen.getByLabelText('From Date'), '2026-10-07');
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+    expect(screen.getByText("The trip can't start in the past.")).toBeInTheDocument();
+
+    await user.clear(screen.getByLabelText('From Date'));
+    await user.type(screen.getByLabelText('From Date'), '2026-10-08');
+    await user.clear(screen.getByLabelText('To Date'));
+    await user.type(screen.getByLabelText('To Date'), '2026-10-14');
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() =>
+      expect(calls.find((c) => c.method === 'PATCH')?.body).toMatchObject({
+        startDate: '2026-10-08',
+        endDate: '2026-10-14',
+      }),
+    );
   });
 });

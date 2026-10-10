@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react';
-import { Navigate, Route, Routes } from 'react-router';
+import { Navigate, Outlet, type RouteObject } from 'react-router';
 import { ProtectedRoute } from './auth/ProtectedRoute';
 import { AppLayout } from './components/AppLayout';
 import { LoadingSpinner } from './components/LoadingSpinner';
@@ -11,21 +11,35 @@ const NewItineraryPage = lazy(() => import('./pages/builder/NewItineraryPage'));
 const TripPage = lazy(() => import('./pages/trip/TripPage'));
 const SharedTripPage = lazy(() => import('./pages/shared/SharedTripPage'));
 
-export function App() {
+function Root() {
   return (
     <Suspense fallback={<LoadingSpinner fullPage />}>
-      <Routes>
-        <Route path="/" element={<WelcomePage />} />
-        <Route path="/shared/:slug" element={<SharedTripPage />} />
-        <Route element={<ProtectedRoute />}>
-          <Route element={<AppLayout />}>
-            <Route path="/trips" element={<DashboardPage />} />
-            <Route path="/trips/new/itinerary" element={<NewItineraryPage />} />
-            <Route path="/trips/:tripId" element={<TripPage />} />
-          </Route>
-        </Route>
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+      <Outlet />
     </Suspense>
   );
 }
+
+/** Route table for createBrowserRouter (a data router, so pages can use useBlocker). */
+export const routes: RouteObject[] = [
+  {
+    element: <Root />,
+    children: [
+      { path: '/', element: <WelcomePage /> },
+      { path: '/shared/:slug', element: <SharedTripPage /> },
+      {
+        element: <ProtectedRoute />,
+        children: [
+          {
+            element: <AppLayout />,
+            children: [
+              { path: '/trips', element: <DashboardPage /> },
+              { path: '/trips/new/itinerary', element: <NewItineraryPage /> },
+              { path: '/trips/:tripId', element: <TripPage /> },
+            ],
+          },
+        ],
+      },
+      { path: '*', element: <Navigate to="/" replace /> },
+    ],
+  },
+];

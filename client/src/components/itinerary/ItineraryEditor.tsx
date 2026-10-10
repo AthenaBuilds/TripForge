@@ -13,6 +13,7 @@ type Props = {
   onUpdate: (key: string, values: ItemValues) => void | Promise<void>;
   onRemove: (key: string) => void | Promise<void>;
   highlightedKeys?: ReadonlySet<string>;
+  statusByKey?: ReadonlyMap<string, 'new' | 'edited'>;
   /** Errors from the last add / update, shown in the matching form. */
   addError?: string | null;
   editError?: string | null;
@@ -30,6 +31,7 @@ export function ItineraryEditor({
   onUpdate,
   onRemove,
   highlightedKeys,
+  statusByKey,
   addError,
   editError,
   onEditCancel,
@@ -66,6 +68,7 @@ export function ItineraryEditor({
             trip={trip}
             items={items}
             highlightedKeys={highlightedKeys}
+            statusByKey={statusByKey}
             editingKey={editingKey}
             onEdit={(item) => setEditingKey(item.key)}
             onRemove={setRemoving}

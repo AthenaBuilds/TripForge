@@ -4,6 +4,7 @@ import {
   assertItemCapacity,
   assertItemInTrip,
   assertItemTimes,
+  assertStartNotPast,
   assertTripDates,
   planDateChange,
 } from './rules.js';
@@ -118,5 +119,18 @@ describe('planDateChange', () => {
     expect(() =>
       planDateChange(current, { startDate: '2026-12-25', endDate: '2026-12-24' }, [], false),
     ).toThrow(expect.objectContaining({ code: 'DATE_RANGE_INVALID' }));
+  });
+});
+
+describe('assertStartNotPast', () => {
+  const now = new Date('2026-10-10T03:00:00Z');
+  it('allows today and yesterday (UTC), for users in earlier time zones', () => {
+    expect(codeOf(() => assertStartNotPast('2026-10-10', now))).toBe(undefined);
+    expect(codeOf(() => assertStartNotPast('2026-10-09', now))).toBe(undefined);
+    expect(codeOf(() => assertStartNotPast('2027-01-01', now))).toBe(undefined);
+  });
+
+  it('rejects anything earlier', () => {
+    expect(codeOf(() => assertStartNotPast('2026-10-08', now))).toBe('START_DATE_IN_PAST');
   });
 });

@@ -1,9 +1,9 @@
 import { render } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
+import { createMemoryRouter, Outlet, RouterProvider, useLocation } from 'react-router';
 import { vi } from 'vitest';
 import type { TripSummary, User } from '@tripforge/shared';
-import { App } from '../App';
+import { routes } from '../App';
 import { AppProviders, createQueryClient } from '../providers';
 
 export const testUser: User = {
@@ -62,17 +62,26 @@ function LocationProbe() {
 /** Renders the full app (providers + routes) at `path`. */
 export function renderApp(path: string) {
   const user = userEvent.setup();
-  const utils = render(
-    <MemoryRouter initialEntries={[path]}>
-      <AppProviders client={createQueryClient({ retries: false })}>
-        <App />
-        <Routes>
-          <Route path="*" element={<LocationProbe />} />
-        </Routes>
-      </AppProviders>
-    </MemoryRouter>,
+  const router = createMemoryRouter(
+    [
+      {
+        element: (
+          <>
+            <Outlet />
+            <LocationProbe />
+          </>
+        ),
+        children: routes,
+      },
+    ],
+    { initialEntries: [path] },
   );
-  return { user, ...utils };
+  const utils = render(
+    <AppProviders client={createQueryClient({ retries: false })}>
+      <RouterProvider router={router} />
+    </AppProviders>,
+  );
+  return { user, router, ...utils };
 }
 
 export function tripSummary(overrides: Partial<TripSummary>): TripSummary {

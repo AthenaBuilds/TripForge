@@ -148,8 +148,8 @@ describe('GET /trips', () => {
     });
     await createTrip(stranger, {
       destination: 'Not mine',
-      startDate: '2026-10-01',
-      endDate: '2026-10-01',
+      startDate: '2026-10-20',
+      endDate: '2026-10-20',
     });
 
     const res = await agent.get('/trips').expect(200);

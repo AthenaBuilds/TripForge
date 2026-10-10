@@ -67,6 +67,8 @@ Since this is a learning/portfolio project, success is measured by delivery and 
 - **2026-10-03 — Unsaved new-trip drafts:** auto-saved to `localStorage` (one per user), with Resume/Discard offered on the dashboard. Drafts are never stored on the backend (frontend-spec.md §6).
 - **2026-10-03 — Dashboard ordering:** Upcoming (soonest first) and Past (most recent first) sections, split on the client. The API returns trips sorted by `startDate` ascending.
 - **2026-10-03 — Trip date changes with out-of-range items:** rejected by default. An optional `shiftItems: true` moves every item by the change in start date. Items are never deleted automatically.
+- **2026-10-10 — Editing a saved trip's itinerary (from manual testing):** item adds, edits, and removals on `/trips/:tripId` are held on the page until the user clicks **Update Trip**, which saves them all at once (`PUT /trips/:tripId/items`, one transaction). **Discard changes** drops them, and leaving the page with unsaved changes asks for confirmation. Previously each change was saved immediately, which testers found unclear.
+- **2026-10-10 — No trips starting in the past:** a new trip's start date must be today or later, and changing an existing trip's start date cannot move it into the past. An ongoing trip whose (unchanged) start date is already past can still be edited. The frontend uses the user's local date; the backend allows one day of slack for time zones (`START_DATE_IN_PAST`).
 
 ## 11. Open Questions
 <!-- Unresolved decisions to track. -->

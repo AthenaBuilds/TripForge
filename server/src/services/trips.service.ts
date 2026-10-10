@@ -8,6 +8,7 @@ import {
   assertItemCapacity,
   assertItemInTrip,
   assertItemTimes,
+  assertStartNotPast,
   assertTripDates,
   planDateChange,
 } from './rules.js';
@@ -50,6 +51,7 @@ export async function getTrip(userId: string, tripId: string, db: Db = prisma) {
 export async function createTrip(userId: string, input: CreateTrip) {
   const range = { startDate: input.startDate, endDate: input.endDate };
   assertTripDates(range);
+  assertStartNotPast(input.startDate);
   assertItemCapacity(0, input.items.length);
   input.items.forEach((item, i) => {
     assertItemInTrip(item.date, range, `items[${i}]`);
@@ -84,6 +86,9 @@ export async function updateTrip(userId: string, tripId: string, input: UpdateTr
       startDate: input.startDate ?? current.startDate,
       endDate: input.endDate ?? current.endDate,
     };
+
+    // Moving the start date can't put it in the past; an ongoing trip's unchanged start is fine.
+    if (next.startDate !== current.startDate) assertStartNotPast(next.startDate);
 
     const datesChanged = next.startDate !== current.startDate || next.endDate !== current.endDate;
     if (datesChanged) {

@@ -5,6 +5,8 @@ type Props = {
   item: ListItem;
   readOnly?: boolean;
   highlighted?: boolean;
+  /** Unsaved change on /trips/:tripId (shown until Update Trip). */
+  status?: 'new' | 'edited';
   onEdit?: (item: ListItem) => void;
   onRemove?: (item: ListItem) => void;
 };
@@ -20,6 +22,7 @@ export const ItineraryItemCard = memo(function ItineraryItemCard({
   item,
   readOnly = false,
   highlighted = false,
+  status,
   onEdit,
   onRemove,
 }: Props) {
@@ -28,8 +31,13 @@ export const ItineraryItemCard = memo(function ItineraryItemCard({
     <article
       aria-label={item.title}
       data-highlighted={highlighted || undefined}
+      data-status={status}
       className={`flex gap-3 rounded-lg border bg-white p-3 sm:gap-4 ${
-        highlighted ? 'border-red-400 ring-2 ring-red-200' : 'border-slate-200'
+        highlighted
+          ? 'border-red-400 ring-2 ring-red-200'
+          : status
+            ? 'border-amber-300 bg-amber-50/40'
+            : 'border-slate-200'
       }`}
     >
       <div className="w-20 shrink-0 pt-0.5 text-sm text-slate-500 tabular-nums sm:w-24">
@@ -41,6 +49,11 @@ export const ItineraryItemCard = memo(function ItineraryItemCard({
           {item.city && (
             <span className="rounded-full bg-sky-100 px-2 py-0.5 text-xs font-semibold text-sky-800">
               {item.city}
+            </span>
+          )}
+          {status && (
+            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
+              {status === 'new' ? 'New' : 'Edited'} · not saved
             </span>
           )}
           {highlighted && (

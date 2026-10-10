@@ -52,6 +52,8 @@ A REST API server that owns all persistent TripForge data. It handles user signu
 <!-- Key rules and validations the backend must enforce. -->
 - Every trip operation is scoped to `req.user.id`. Accessing a trip owned by another user returns **404** (not 403), so the API does not reveal that the trip exists.
 - `startDate <= endDate`, and a trip lasts at most 60 days.
+- A trip can't start in the past: on create, and on update when `startDate` changes, `startDate` must be no earlier than **yesterday in UTC** (one day of slack, because the server doesn't know the user's time zone; the frontend enforces the user's local today). Otherwise `422 START_DATE_IN_PAST`. An unchanged past start date (an ongoing trip) is allowed.
+- `PUT /trips/:tripId/items` replaces the trip's whole itinerary in **one transaction**: listed items with an `id` are updated, items without an `id` are created, and existing items not listed are deleted. All item rules (dates within the trip, start ≤ end time, ≤ 200 items) are checked on the final list before anything is written. An `id` that doesn't belong to this trip returns `404`. Existing item ids and `createdAt` are kept.
 - An item's `date` must fall within its trip's `startDate`–`endDate`. If an item has both `startTime` and `endTime`, then `startTime <= endTime`.
 - When a trip's dates are changed, the update is rejected (`422 ITEMS_OUT_OF_RANGE`) if any existing item would fall outside the new range. Items are never silently deleted.
 - If the request sets `shiftItems: true`, every item's date is first moved by `newStartDate − oldStartDate` days, in the same transaction as the trip update. The range check then runs on the shifted dates. See api-contract-spec.md `PATCH /trips/:tripId`.

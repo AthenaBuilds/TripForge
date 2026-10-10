@@ -5,6 +5,7 @@ import type {
   ItineraryItemInput,
   ItineraryItemPatch,
   LoginInput,
+  ReplaceItemsInput,
   ShareInfo,
   SharedTrip,
   SignupInput,
@@ -38,6 +39,11 @@ export const tripsApi = {
   update: (tripId: string, input: UpdateTripInput) =>
     api<{ trip: TripDetail }>(`/trips/${tripId}`, json('PATCH', input)).then((d) => d.trip),
   remove: (tripId: string) => api<void>(`/trips/${tripId}`, { method: 'DELETE' }),
+  /** Update Trip: replace the whole itinerary in one transaction. */
+  replaceItems: (tripId: string, input: ReplaceItemsInput) =>
+    api<{ trip: TripDetail }>(`/trips/${tripId}/items`, { method: 'PUT', body: input }).then(
+      (d) => d.trip,
+    ),
   exportFile: (tripId: string, format: ExportFormat) =>
     apiDownload(`/trips/${tripId}/export?format=${format}`),
   share: (tripId: string) => api<ShareInfo>(`/trips/${tripId}/share`, { method: 'POST' }),
