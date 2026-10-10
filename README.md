@@ -26,4 +26,7 @@ npm run dev -w @tripforge/client   # SPA on :5173, proxies /api -> :3000
 
 Server tests use `server/.env.test` (the `tripforge_test` db) and truncate it, never your dev db.
 
+Production image (API): `docker build -f server/Dockerfile -t tripforge-api .` from the repo root.
+Run migrations with the same image: `docker run --rm -e DATABASE_URL=... tripforge-api npx prisma migrate deploy`.
+
 Checks: `npm run lint`, `npm run typecheck`, `npm test`, `npm run build`.

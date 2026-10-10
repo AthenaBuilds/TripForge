@@ -25,6 +25,7 @@ jobs:
           filters: |
             server:
               - 'server/**'
+              - '.dockerignore'
               - 'shared/**'
               - 'package-lock.json'
             client:
@@ -65,6 +66,8 @@ jobs:
       - run: npm run db:deploy -w @tripforge/server
       - run: npm test -w @tripforge/server
       - run: npm run build -w @tripforge/server
+      - name: Build production image
+        run: docker build -f server/Dockerfile -t tripforge-api:ci .
 
   client:
     needs: changes
