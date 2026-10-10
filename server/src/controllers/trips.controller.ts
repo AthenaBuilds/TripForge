@@ -1,5 +1,11 @@
 import type { RequestHandler } from 'express';
-import { createTripInputSchema, tripParamsSchema, updateTripInputSchema } from '@tripforge/shared';
+import {
+  createTripInputSchema,
+  exportQuerySchema,
+  tripParamsSchema,
+  updateTripInputSchema,
+} from '@tripforge/shared';
+import { sendExport } from '../export/index.js';
 import { toTripDetailDto, toTripSummaryDto } from '../lib/dto.js';
 import { parse, sendData } from '../lib/http.js';
 import { currentUserId } from '../middleware/requireAuth.js';
@@ -33,4 +39,11 @@ export const remove: RequestHandler = async (req, res) => {
   const { tripId } = parse(tripParamsSchema, req.params);
   await tripsService.deleteTrip(currentUserId(req), tripId);
   res.status(204).end();
+};
+
+export const exportTrip: RequestHandler = async (req, res) => {
+  const { tripId } = parse(tripParamsSchema, req.params);
+  const { format } = parse(exportQuerySchema, req.query);
+  const trip = toTripDetailDto(await tripsService.getTrip(currentUserId(req), tripId));
+  await sendExport(res, trip, format);
 };

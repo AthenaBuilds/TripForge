@@ -1,4 +1,4 @@
-import type { ItineraryItem, TripDetail, TripSummary, User } from '@tripforge/shared';
+import type { ItineraryItem, SharedTrip, TripDetail, TripSummary, User } from '@tripforge/shared';
 import type {
   ItineraryItem as ItemRow,
   Trip as TripRow,
@@ -55,5 +55,27 @@ export function toTripDetailDto(trip: TripRow & { items: ItemRow[] }): TripDetai
     createdAt: trip.createdAt.toISOString(),
     updatedAt: trip.updatedAt.toISOString(),
     items: trip.items.map(toItemDto),
+  };
+}
+
+export function toSharedTripDto(
+  trip: TripRow & { user: { name: string }; items: ItemRow[] },
+): SharedTrip {
+  // Allowlist: no ids, userId, email, or timestamps other than updatedAt (backend-spec §7).
+  return {
+    destination: trip.destination,
+    startDate: fromDbDate(trip.startDate),
+    endDate: fromDbDate(trip.endDate),
+    ownerName: trip.user.name,
+    updatedAt: trip.updatedAt.toISOString(),
+    items: trip.items.map((item) => ({
+      title: item.title,
+      date: fromDbDate(item.date),
+      startTime: item.startTime,
+      endTime: item.endTime,
+      city: item.city,
+      location: item.location,
+      notes: item.notes,
+    })),
   };
 }

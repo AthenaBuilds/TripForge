@@ -136,7 +136,7 @@ describe('GET /auth/me and POST /auth/logout', () => {
 
 describe('rate limiting', () => {
   it('returns 429 RATE_LIMITED with Retry-After after too many login attempts', async () => {
-    const limited = testApp({ rateLimits: { credentials: 2, general: 1000 } });
+    const limited = testApp({ rateLimits: { credentials: 2, shared: 1000, general: 1000 } });
     const attempt = () =>
       request(limited).post('/auth/login').send({ email: uniqueEmail(), password: 'x' });
 
