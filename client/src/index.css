@@ -1,1 +1,50 @@
 @import 'tailwindcss';
+
+@theme {
+  --font-heading: 'Montserrat', ui-sans-serif, system-ui, sans-serif;
+  --font-body: 'Open Sans', ui-sans-serif, system-ui, sans-serif;
+}
+
+@layer base {
+  body {
+    @apply bg-slate-50 font-body text-slate-900 antialiased;
+  }
+  h1,
+  h2,
+  h3 {
+    @apply font-heading;
+  }
+}
+
+/* Reusable component classes (Tailwind v4: @utility so they can be composed with @apply). */
+@utility btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 disabled:cursor-not-allowed disabled:opacity-50;
+}
+
+@utility btn-primary {
+  @apply btn bg-sky-700 text-white hover:bg-sky-800;
+}
+
+@utility btn-secondary {
+  @apply btn border border-slate-300 bg-white text-slate-800 hover:bg-slate-100;
+}
+
+@utility btn-danger {
+  @apply btn border border-red-300 bg-white text-red-700 hover:bg-red-50;
+}
+
+@utility field-label {
+  @apply mb-1 block text-sm font-semibold text-slate-700;
+}
+
+@utility field-input {
+  @apply block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-base shadow-sm focus:border-sky-600 focus:ring-2 focus:ring-sky-200 focus:outline-none aria-[invalid=true]:border-red-500;
+}
+
+@utility field-error {
+  @apply mt-1 text-sm text-red-700;
+}
+
+@utility card {
+  @apply rounded-xl border border-slate-200 bg-white p-4 shadow-sm;
+}
