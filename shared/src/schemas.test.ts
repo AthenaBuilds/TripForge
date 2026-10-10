@@ -132,3 +132,12 @@ describe('exportQuerySchema', () => {
     expect(exportQuerySchema.safeParse({}).success).toBe(false);
   });
 });
+
+describe('patch schemas with only unknown fields', () => {
+  it('report just the unknown field, not "at least one field"', () => {
+    const item = itineraryItemPatchSchema.safeParse({ tripId: 'x' });
+    expect(item.error?.issues.map((i) => i.code)).toEqual(['unrecognized_keys']);
+    const trip = updateTripInputSchema.safeParse({ userId: 'x' });
+    expect(trip.error?.issues.map((i) => i.code)).toEqual(['unrecognized_keys']);
+  });
+});

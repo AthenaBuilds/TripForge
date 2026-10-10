@@ -9,6 +9,7 @@ import { logger } from './lib/logger.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { createRateLimiter } from './middleware/rateLimit.js';
 import { authRoutes } from './routes/auth.routes.js';
+import { tripsRoutes } from './routes/trips.routes.js';
 
 export type AppOptions = {
   /** Requests per minute per IP (api-contract-spec §8). Overridable for tests. */
@@ -33,6 +34,7 @@ export function createApp({ rateLimits = { credentials: 10, general: 100 } }: Ap
 
   app.use(createRateLimiter(rateLimits.general));
   app.use('/auth', authRoutes(createRateLimiter(rateLimits.credentials)));
+  app.use('/trips', tripsRoutes());
 
   app.use(notFoundHandler);
   app.use(errorHandler);

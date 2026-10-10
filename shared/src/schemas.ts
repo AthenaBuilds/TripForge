@@ -7,6 +7,10 @@ import { LIMITS } from './limits.ts';
 
 // ---------- Primitives ----------
 
+// "At least one field" checks only make sense once the object is otherwise valid; without
+// this, a body with only an unknown field would also get a confusing "nothing to update" error.
+const onlyIfValid = { when: (payload: { issues: unknown[] }) => payload.issues.length === 0 };
+
 export const uuidSchema = z.uuid();
 export const dateSchema = z
   .string()
@@ -56,7 +60,10 @@ export const itineraryItemInputSchema = z.strictObject(itemFields);
 export const itineraryItemPatchSchema = z
   .strictObject(itemFields)
   .partial()
-  .refine((v) => Object.keys(v).length > 0, { message: 'at least one field is required' });
+  .refine((v) => Object.keys(v).length > 0, {
+    message: 'at least one field is required',
+    ...onlyIfValid,
+  });
 
 export const itineraryItemSchema = z.object({
   id: uuidSchema,
@@ -93,7 +100,10 @@ export const updateTripInputSchema = z
   })
   .refine(
     (v) => v.destination !== undefined || v.startDate !== undefined || v.endDate !== undefined,
-    { message: 'at least one of destination, startDate, endDate is required' },
+    {
+      message: 'at least one of destination, startDate, endDate is required',
+      ...onlyIfValid,
+    },
   );
 
 export const tripSummarySchema = z.object({
