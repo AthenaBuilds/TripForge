@@ -1,0 +1,13 @@
+**/node_modules
+**/dist
+**/coverage
+**/.env
+**/.env.*
+!**/.env.example
+server/src/generated
+client
+infra
+specs
+.git
+.github
+*.md
