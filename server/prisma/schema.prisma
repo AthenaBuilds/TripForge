@@ -1,0 +1,59 @@
+generator client {
+  provider            = "prisma-client"
+  output              = "../src/generated/prisma"
+  moduleFormat        = "esm"
+  importFileExtension = "js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  name         String   @db.VarChar(60)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  trips        Trip[]
+
+  @@map("users")
+}
+
+model Trip {
+  id          String          @id @default(uuid()) @db.Uuid
+  userId      String          @map("user_id") @db.Uuid
+  destination String          @db.VarChar(100)
+  // Calendar dates with no time zone (backend-spec §4).
+  startDate   DateTime        @map("start_date") @db.Date
+  endDate     DateTime        @map("end_date") @db.Date
+  shareSlug   String?         @unique @map("share_slug") @db.VarChar(32)
+  sharedAt    DateTime?       @map("shared_at")
+  createdAt   DateTime        @default(now()) @map("created_at")
+  updatedAt   DateTime        @updatedAt @map("updated_at")
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items       ItineraryItem[]
+
+  @@index([userId])
+  @@map("trips")
+}
+
+model ItineraryItem {
+  id        String   @id @default(uuid()) @db.Uuid
+  tripId    String   @map("trip_id") @db.Uuid
+  title     String   @db.VarChar(120)
+  date      DateTime @db.Date
+  // HH:mm strings (backend-spec §4).
+  startTime String?  @map("start_time") @db.VarChar(5)
+  endTime   String?  @map("end_time") @db.VarChar(5)
+  city      String?  @db.VarChar(80)
+  location  String?  @db.VarChar(120)
+  notes     String?  @db.VarChar(1000)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  trip      Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  @@index([tripId, date])
+  @@map("itinerary_items")
+}
