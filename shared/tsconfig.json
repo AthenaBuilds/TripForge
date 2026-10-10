@@ -1,1 +1,11 @@
-{ "extends": "../tsconfig.base.json", "include": ["src"] }
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    // Shared is consumed as raw .ts (Node 24 type stripping, Vite, tsx), so it must use
+    // erasable syntax only and import siblings with .ts extensions.
+    "erasableSyntaxOnly": true,
+    "allowImportingTsExtensions": true,
+    "noEmit": true
+  },
+  "include": ["src"]
+}
