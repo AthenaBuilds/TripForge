@@ -36,6 +36,23 @@ jobs:
     needs: changes
     if: needs.changes.outputs.server == 'true'
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        # Same credentials as server/.env.test, which the tests read.
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: tripforge
+          POSTGRES_PASSWORD: tripforge
+          POSTGRES_DB: tripforge_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U tripforge"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://tripforge:tripforge@localhost:5432/tripforge_test
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -45,6 +62,7 @@ jobs:
       - run: npm ci
       - run: npx eslint server shared
       - run: npm run typecheck -w @tripforge/shared -w @tripforge/server
+      - run: npm run db:deploy -w @tripforge/server
       - run: npm test -w @tripforge/server
       - run: npm run build -w @tripforge/server
 
