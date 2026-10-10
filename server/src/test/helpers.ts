@@ -3,7 +3,7 @@ import { createApp, type AppOptions } from '../app.js';
 
 /** An app with rate limits high enough that they never trigger in ordinary tests. */
 export function testApp(options: AppOptions = {}) {
-  return createApp({ rateLimits: { credentials: 1000, general: 1000 }, ...options });
+  return createApp({ rateLimits: { credentials: 1000, shared: 1000, general: 1000 }, ...options });
 }
 
 let counter = 0;
