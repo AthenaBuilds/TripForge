@@ -79,6 +79,22 @@ export const itineraryItemSchema = z.object({
   updatedAt: timestampSchema,
 });
 
+/** PUT /trips/:tripId/items: the whole itinerary; entries with an id update that item. */
+export const replaceItemsInputSchema = z
+  .strictObject({
+    items: z.array(itineraryItemInputSchema.extend({ id: uuidSchema.optional() })),
+  })
+  .superRefine(({ items }, ctx) => {
+    const seen = new Set<string>();
+    items.forEach((item, i) => {
+      if (!item.id) return;
+      if (seen.has(item.id)) {
+        ctx.addIssue({ code: 'custom', path: ['items', i, 'id'], message: 'duplicate item id' });
+      }
+      seen.add(item.id);
+    });
+  });
+
 // ---------- Trips ----------
 
 const destinationSchema = z.string().trim().min(1).max(LIMITS.destinationMax);
@@ -160,6 +176,7 @@ export type LoginInput = z.infer<typeof loginInputSchema>;
 export type User = z.infer<typeof userSchema>;
 export type ItineraryItemInput = z.input<typeof itineraryItemInputSchema>;
 export type ItineraryItemPatch = z.infer<typeof itineraryItemPatchSchema>;
+export type ReplaceItemsInput = z.input<typeof replaceItemsInputSchema>;
 export type ItineraryItem = z.infer<typeof itineraryItemSchema>;
 export type CreateTripInput = z.input<typeof createTripInputSchema>;
 export type UpdateTripInput = z.input<typeof updateTripInputSchema>;

@@ -19,6 +19,7 @@ export function tripsRoutes(): Router {
   router.delete('/:tripId/share', share.unshare);
 
   router.post('/:tripId/items', items.create);
+  router.put('/:tripId/items', items.replaceAll);
   router.patch('/:tripId/items/:itemId', items.update);
   router.delete('/:tripId/items/:itemId', items.remove);
   return router;

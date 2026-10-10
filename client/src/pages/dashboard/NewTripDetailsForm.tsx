@@ -1,16 +1,27 @@
 import { useId, useState, type FormEvent } from 'react';
 import { LIMITS, tripLengthDays } from '@tripforge/shared';
 import type { DraftDetails } from '../../draft/DraftTripContext';
+import { todayLocal } from '../../lib/dates';
 
 type FieldErrors = Partial<Record<keyof DraftDetails, string>>;
 
-export function validateTripDetails(values: DraftDetails): FieldErrors {
+/**
+ * `today` is the user's local date. `savedStartDate` is set when editing an existing trip: an
+ * unchanged start date that is already past (an ongoing trip) is accepted (frontend-spec §9).
+ */
+export function validateTripDetails(
+  values: DraftDetails,
+  today: string,
+  savedStartDate?: string,
+): FieldErrors {
   const errors: FieldErrors = {};
   const destination = values.destination.trim();
   if (!destination) errors.destination = 'Enter a destination.';
   else if (destination.length > LIMITS.destinationMax)
     errors.destination = `Use at most ${LIMITS.destinationMax} characters.`;
   if (!values.startDate) errors.startDate = 'Choose a start date.';
+  else if (values.startDate < today && values.startDate !== savedStartDate)
+    errors.startDate = "The trip can't start in the past.";
   if (!values.endDate) errors.endDate = 'Choose an end date.';
   if (values.startDate && values.endDate) {
     if (values.endDate < values.startDate)
@@ -25,9 +36,16 @@ type Props = {
   onSubmit: (details: DraftDetails) => void;
   initial?: DraftDetails;
   submitLabel?: string;
+  /** Editing an existing trip: its saved start date may stay in the past. */
+  savedStartDate?: string;
 };
 
-export function NewTripDetailsForm({ onSubmit, initial, submitLabel = 'Add Trip' }: Props) {
+export function NewTripDetailsForm({
+  onSubmit,
+  initial,
+  submitLabel = 'Add Trip',
+  savedStartDate,
+}: Props) {
   const [values, setValues] = useState<DraftDetails>(
     initial ?? { destination: '', startDate: '', endDate: '' },
   );
@@ -36,12 +54,16 @@ export function NewTripDetailsForm({ onSubmit, initial, submitLabel = 'Add Trip'
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    const found = validateTripDetails(values);
+    const found = validateTripDetails(values, todayLocal(), savedStartDate);
     setErrors(found);
     if (Object.keys(found).length === 0) {
       onSubmit({ ...values, destination: values.destination.trim() });
     }
   }
+
+  const today = todayLocal();
+  // An ongoing trip keeps its past start date selectable.
+  const minStart = savedStartDate && savedStartDate < today ? savedStartDate : today;
 
   const set = (name: keyof DraftDetails) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setValues((v) => ({ ...v, [name]: e.target.value }));
@@ -83,6 +105,7 @@ export function NewTripDetailsForm({ onSubmit, initial, submitLabel = 'Add Trip'
           id={`${id}-startDate`}
           type="date"
           className="field-input"
+          min={minStart}
           value={values.startDate}
           onChange={set('startDate')}
           {...errorProps('startDate')}

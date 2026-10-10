@@ -14,6 +14,17 @@ export function assertTripDates({ startDate, endDate }: DateRange): void {
   }
 }
 
+/**
+ * A trip can't start in the past (goal-spec §10, 2026-10-10). The server doesn't know the user's
+ * time zone, so "past" means before yesterday in UTC; the frontend enforces the local today.
+ */
+export function assertStartNotPast(startDate: string, now = new Date()): void {
+  const earliest = addDays(now.toISOString().slice(0, 10), -1);
+  if (startDate < earliest) {
+    throw new AppError('START_DATE_IN_PAST', "The trip can't start in the past");
+  }
+}
+
 /** `label` names the item in the message, e.g. "items[3]" when creating a trip. */
 export function assertItemTimes({ startTime, endTime }: ItemTimes, label = 'Item'): void {
   // HH:mm strings compare correctly as strings.

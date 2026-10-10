@@ -1,21 +1,23 @@
-import { useMemo, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router';
+import { useEffect, useMemo, useState } from 'react';
+import { Link, Navigate, useBlocker, useParams } from 'react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { daysBetween, type TripDetail } from '@tripforge/shared';
 import { ApiRequestError } from '../../api/client';
-import { itemsApi, queryKeys, tripsApi } from '../../api/endpoints';
+import { queryKeys, tripsApi } from '../../api/endpoints';
 import { errorMessage } from '../../api/messages';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { EmptyState } from '../../components/EmptyState';
 import { ErrorBanner } from '../../components/ErrorBanner';
 import { ExportButton } from '../../components/ExportButton';
 import { ItineraryEditor } from '../../components/itinerary/ItineraryEditor';
-import { toListItem, type ItemValues } from '../../components/itinerary/types';
+import { toListItem } from '../../components/itinerary/types';
 import { LoadingSpinner } from '../../components/LoadingSpinner';
 import type { DraftDetails } from '../../draft/DraftTripContext';
 import { NewTripDetailsForm } from '../dashboard/NewTripDetailsForm';
 import { TripHeader } from '../TripHeader';
 import { ShareTripPanel } from './ShareTripPanel';
+import { UpdateTripBar } from './UpdateTripBar';
+import { usePendingItems } from './usePendingItems';
 
 export default function TripPage() {
   const { tripId = '' } = useParams();
@@ -43,36 +45,69 @@ type DateChange = { details: DraftDetails; offset: number };
 
 function TripView({ trip }: { trip: TripDetail }) {
   const queryClient = useQueryClient();
-  const navigate = useNavigate();
   const [editingDetails, setEditingDetails] = useState(false);
   const [dateChange, setDateChange] = useState<DateChange | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [detailsError, setDetailsError] = useState<string | null>(null);
   const [outOfRange, setOutOfRange] = useState<ReadonlySet<string>>(new Set());
-  const [addError, setAddError] = useState<string | null>(null);
-  const [editError, setEditError] = useState<string | null>(null);
-  const [removeError, setRemoveError] = useState<string | null>(null);
+  const [updateError, setUpdateError] = useState<string | null>(null);
 
-  // Insertion order, so the City default comes from the most recently added item.
-  const items = useMemo(
+  // Saved items in insertion order, so the City default comes from the most recently added item.
+  const savedItems = useMemo(
     () =>
       [...trip.items]
         .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
         .map((i) => toListItem(i.id, i)),
     [trip.items],
   );
+  const pending = usePendingItems(savedItems);
 
-  const refresh = () =>
-    Promise.all([
-      queryClient.invalidateQueries({ queryKey: queryKeys.trip(trip.id) }),
-      queryClient.invalidateQueries({ queryKey: queryKeys.trips, exact: true }),
-    ]);
+  const deleteTrip = useMutation({
+    mutationFn: () => tripsApi.remove(trip.id),
+    onSuccess: () => {
+      queryClient.removeQueries({ queryKey: queryKeys.trip(trip.id) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.trips, exact: true });
+    },
+  });
+
+  // Ask before leaving with unsaved item changes: in-app navigation...
+  const blocker = useBlocker(pending.isDirty && !deleteTrip.isSuccess);
+  // ...and reload / closing the tab.
+  useEffect(() => {
+    if (!pending.isDirty) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [pending.isDirty]);
+
+  const saved = (updated: TripDetail) => {
+    queryClient.setQueryData(queryKeys.trip(trip.id), updated);
+    void queryClient.invalidateQueries({ queryKey: queryKeys.trips, exact: true });
+  };
+
+  const updateItems = useMutation({
+    mutationFn: () => tripsApi.replaceItems(trip.id, pending.toRequest()),
+    onMutate: () => setUpdateError(null),
+    onSuccess: (updated) => {
+      saved(updated);
+      pending.reset();
+      setOutOfRange(new Set());
+    },
+    onError: (err) => {
+      // "items[3]: ..." -> the item's title, since the user never sees indexes.
+      const message = errorMessage(err).replace(/^items\[(\d+)\]/, (match, i: string) => {
+        const item = pending.items[Number(i)];
+        return item ? `"${item.title}"` : match;
+      });
+      setUpdateError(message);
+    },
+  });
 
   const updateTrip = useMutation({
     mutationFn: (input: DraftDetails & { shiftItems: boolean }) => tripsApi.update(trip.id, input),
     onSuccess: (updated) => {
-      queryClient.setQueryData(queryKeys.trip(trip.id), updated);
-      void queryClient.invalidateQueries({ queryKey: queryKeys.trips, exact: true });
+      saved(updated);
       setEditingDetails(false);
       setOutOfRange(new Set());
       setDetailsError(null);
@@ -85,7 +120,7 @@ function TripView({ trip }: { trip: TripDetail }) {
         setOutOfRange(new Set(ids));
         const n = ids.length;
         setDetailsError(
-          `${n} ${n === 1 ? 'item falls' : 'items fall'} outside the new dates. Edit or remove the highlighted ${n === 1 ? 'item' : 'items'}, then try again.`,
+          `${n} ${n === 1 ? 'item falls' : 'items fall'} outside the new dates. Edit or remove the highlighted ${n === 1 ? 'item' : 'items'}, click Update Trip, then change the dates again.`,
         );
       } else {
         setDetailsError(errorMessage(err));
@@ -101,51 +136,7 @@ function TripView({ trip }: { trip: TripDetail }) {
     else updateTrip.mutate({ ...details, shiftItems: false });
   }
 
-  const deleteTrip = useMutation({
-    mutationFn: () => tripsApi.remove(trip.id),
-    onSuccess: () => {
-      queryClient.removeQueries({ queryKey: queryKeys.trip(trip.id) });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.trips, exact: true });
-      navigate('/trips', { replace: true });
-    },
-  });
-
-  async function addItem(values: ItemValues) {
-    setAddError(null);
-    try {
-      await itemsApi.create(trip.id, values);
-      await refresh();
-    } catch (err) {
-      setAddError(errorMessage(err));
-      throw err; // keep the form's values
-    }
-  }
-
-  async function updateItem(itemId: string, values: ItemValues) {
-    setEditError(null);
-    try {
-      await itemsApi.update(trip.id, itemId, values);
-      await refresh();
-    } catch (err) {
-      setEditError(errorMessage(err));
-      throw err;
-    }
-  }
-
-  async function removeItem(itemId: string) {
-    setRemoveError(null);
-    try {
-      await itemsApi.remove(trip.id, itemId);
-      setOutOfRange((s) => {
-        const next = new Set(s);
-        next.delete(itemId);
-        return next;
-      });
-      await refresh();
-    } catch (err) {
-      setRemoveError(errorMessage(err));
-    }
-  }
+  if (deleteTrip.isSuccess) return <Navigate to="/trips" replace />;
 
   const days = dateChange ? Math.abs(dateChange.offset) : 0;
 
@@ -166,6 +157,7 @@ function TripView({ trip }: { trip: TripDetail }) {
               startDate: trip.startDate,
               endDate: trip.endDate,
             }}
+            savedStartDate={trip.startDate}
             submitLabel={updateTrip.isPending ? 'Saving…' : 'Save changes'}
             onSubmit={handleDetails}
           />
@@ -175,7 +167,6 @@ function TripView({ trip }: { trip: TripDetail }) {
             onClick={() => {
               setEditingDetails(false);
               setDetailsError(null);
-              setOutOfRange(new Set());
             }}
           >
             Cancel
@@ -194,13 +185,22 @@ function TripView({ trip }: { trip: TripDetail }) {
             )
           }
         >
-          <button
-            type="button"
-            className="text-sm font-semibold text-sky-700 hover:underline"
-            onClick={() => setEditingDetails(true)}
-          >
-            Edit trip details
-          </button>
+          <div className="flex flex-wrap items-center gap-x-3">
+            <button
+              type="button"
+              className="text-sm font-semibold text-sky-700 hover:underline disabled:cursor-not-allowed disabled:text-slate-400 disabled:no-underline"
+              disabled={pending.isDirty}
+              aria-describedby={pending.isDirty ? 'details-locked-hint' : undefined}
+              onClick={() => setEditingDetails(true)}
+            >
+              Edit trip details
+            </button>
+            {pending.isDirty && (
+              <span id="details-locked-hint" className="text-xs text-slate-500">
+                Update or discard your item changes first
+              </span>
+            )}
+          </div>
         </TripHeader>
       )}
       {detailsError && (
@@ -208,26 +208,41 @@ function TripView({ trip }: { trip: TripDetail }) {
       )}
 
       <div className="grid gap-4 md:grid-cols-2">
-        <div className="card p-4">
+        <div className="card space-y-2 p-4">
           <ExportButton download={(format) => tripsApi.exportFile(trip.id, format)} />
+          {pending.isDirty && (
+            <p className="text-xs text-slate-500">Exports use the last saved version.</p>
+          )}
         </div>
         <ShareTripPanel trip={trip} />
       </div>
 
-      {removeError && (
-        <ErrorBanner onDismiss={() => setRemoveError(null)}>{removeError}</ErrorBanner>
-      )}
       <ItineraryEditor
         trip={trip}
-        items={items}
+        items={pending.items}
         highlightedKeys={outOfRange}
-        onAdd={addItem}
-        onUpdate={updateItem}
-        onRemove={removeItem}
-        addError={addError}
-        editError={editError}
-        onEditCancel={() => setEditError(null)}
+        statusByKey={pending.statusByKey}
+        onAdd={pending.add}
+        onUpdate={pending.update}
+        onRemove={(key) => {
+          pending.remove(key);
+          setOutOfRange((s) => {
+            const next = new Set(s);
+            next.delete(key);
+            return next;
+          });
+        }}
       />
+
+      {pending.isDirty && (
+        <UpdateTripBar
+          summary={pending.summary}
+          saving={updateItems.isPending}
+          error={updateError}
+          onUpdate={() => updateItems.mutate()}
+          onDiscard={() => setConfirmDiscard(true)}
+        />
+      )}
 
       <section className="border-t border-slate-200 pt-6">
         <button type="button" className="btn-danger" onClick={() => setConfirmDelete(true)}>
@@ -265,6 +280,39 @@ function TripView({ trip }: { trip: TripDetail }) {
           The trip now starts {days} {days === 1 ? 'day' : 'days'}{' '}
           {dateChange.offset > 0 ? 'later' : 'earlier'}. Move every item by the same amount, or keep
           each item on its current date?
+        </ConfirmDialog>
+      )}
+
+      {confirmDiscard && (
+        <ConfirmDialog
+          title="Discard your changes?"
+          onCancel={() => setConfirmDiscard(false)}
+          actions={[
+            {
+              label: 'Discard changes',
+              variant: 'danger',
+              onClick: () => {
+                pending.reset();
+                setUpdateError(null);
+                setConfirmDiscard(false);
+              },
+            },
+          ]}
+        >
+          The itinerary goes back to the last saved version.
+        </ConfirmDialog>
+      )}
+
+      {blocker.state === 'blocked' && (
+        <ConfirmDialog
+          title="Leave without saving?"
+          onCancel={() => blocker.reset()}
+          actions={[
+            { label: 'Leave without saving', variant: 'danger', onClick: () => blocker.proceed() },
+          ]}
+        >
+          You have {pending.changeCount} unsaved {pending.changeCount === 1 ? 'change' : 'changes'}{' '}
+          to this itinerary. Click <strong>Update Trip</strong> to keep them.
         </ConfirmDialog>
       )}
 

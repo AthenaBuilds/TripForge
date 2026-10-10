@@ -182,3 +182,23 @@ describe('draft banner', () => {
     await waitFor(() => expect(loadDraft(testUser.id)?.destination).toBe('Goa'));
   });
 });
+
+describe('start date rule (today: 2026-10-10)', () => {
+  it('rejects a From Date in the past and allows today', async () => {
+    mockApi({ ...loggedIn, 'GET /trips': { body: { trips: [] } } });
+    const { user } = renderApp('/trips');
+    const from = await screen.findByLabelText('From Date');
+    expect(from).toHaveAttribute('min', '2026-10-10');
+
+    await user.type(screen.getByLabelText('Destination'), 'Goa');
+    await user.type(from, '2026-10-09');
+    await user.type(screen.getByLabelText('To Date'), '2026-10-12');
+    await user.click(screen.getByRole('button', { name: 'Add Trip' }));
+    expect(screen.getByText("The trip can't start in the past.")).toBeInTheDocument();
+
+    await user.clear(from);
+    await user.type(from, '2026-10-10');
+    await user.click(screen.getByRole('button', { name: 'Add Trip' }));
+    await waitFor(() => expect(location()).toBe('/trips/new/itinerary'));
+  });
+});

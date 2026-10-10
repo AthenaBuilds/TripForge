@@ -9,6 +9,7 @@ type Props = {
   items: ListItem[];
   readOnly?: boolean;
   highlightedKeys?: ReadonlySet<string>;
+  statusByKey?: ReadonlyMap<string, 'new' | 'edited'>;
   onEdit?: (item: ListItem) => void;
   onRemove?: (item: ListItem) => void;
   /** Renders in place of the card being edited. */
@@ -25,6 +26,7 @@ export function ItineraryItemList({
   items,
   readOnly = false,
   highlightedKeys,
+  statusByKey,
   onEdit,
   onRemove,
   editingKey,
@@ -76,6 +78,7 @@ export function ItineraryItemList({
                         item={item}
                         readOnly={readOnly}
                         highlighted={highlightedKeys?.has(item.key)}
+                        status={statusByKey?.get(item.key)}
                         onEdit={onEdit}
                         onRemove={onRemove}
                       />

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   createTripInputSchema,
+  replaceItemsInputSchema,
   exportQuerySchema,
   itineraryItemInputSchema,
   itineraryItemPatchSchema,
@@ -139,5 +140,26 @@ describe('patch schemas with only unknown fields', () => {
     expect(item.error?.issues.map((i) => i.code)).toEqual(['unrecognized_keys']);
     const trip = updateTripInputSchema.safeParse({ userId: 'x' });
     expect(trip.error?.issues.map((i) => i.code)).toEqual(['unrecognized_keys']);
+  });
+});
+
+describe('replaceItemsInputSchema', () => {
+  const id = '5d1e9d3c-0a5b-4c1e-9b7a-1f2e3d4c5b6a';
+  it('accepts items with and without ids, and an empty list', () => {
+    expect(
+      replaceItemsInputSchema.safeParse({
+        items: [{ id, title: 'a', date: '2026-12-20' }, { title: 'b', date: '2026-12-21' }],
+      }).success,
+    ).toBe(true);
+    expect(replaceItemsInputSchema.safeParse({ items: [] }).success).toBe(true);
+  });
+
+  it('rejects duplicate ids, bad ids, and unknown fields', () => {
+    const dup = replaceItemsInputSchema.safeParse({
+      items: [{ id, title: 'a', date: '2026-12-20' }, { id, title: 'b', date: '2026-12-21' }],
+    });
+    expect(dup.error?.issues[0]?.path).toEqual(['items', 1, 'id']);
+    expect(replaceItemsInputSchema.safeParse({ items: [{ id: 'x', title: 'a', date: '2026-12-20' }] }).success).toBe(false);
+    expect(replaceItemsInputSchema.safeParse({ items: [{ title: 'a', date: '2026-12-20', tripId: id }] }).success).toBe(false);
   });
 });

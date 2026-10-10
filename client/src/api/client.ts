@@ -23,7 +23,7 @@ export function setUnauthenticatedHandler(handler: (() => void) | null): void {
 }
 
 type RequestOptions = {
-  method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
+  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   body?: unknown;
   /** Public endpoints (/shared/*) and the session probe must not trigger the 401 handler. */
   skipAuthRedirect?: boolean;

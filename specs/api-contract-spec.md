@@ -60,6 +60,7 @@ On failure, `data` is `null`:
 | `NOT_FOUND` | 404 | The route, trip, or item doesn't exist, or belongs to another user. |
 | `EMAIL_TAKEN` | 409 | Signup with an email that is already registered. |
 | `DATE_RANGE_INVALID` | 422 | `startDate > endDate`, or the trip lasts more than 60 days. |
+| `START_DATE_IN_PAST` | 422 | A new trip's `startDate`, or a changed `startDate`, is before yesterday (UTC). Added 2026-10-10. |
 | `ITEM_DATE_OUT_OF_RANGE` | 422 | An item's `date` falls outside its trip's dates. |
 | `ITEM_TIME_INVALID` | 422 | `startTime` is after `endTime`. |
 | `ITEMS_OUT_OF_RANGE` | 422 | A trip date change would leave existing items outside the new range. `details` lists the affected item ids. |
@@ -169,7 +170,7 @@ On failure, `data` is `null`:
 - **Error cases:**
   - `400 VALIDATION_ERROR` (item errors use `details[].field` paths like `items[3].title`)
   - `401 UNAUTHENTICATED`
-  - `422 DATE_RANGE_INVALID`, `ITEM_DATE_OUT_OF_RANGE`, `ITEM_TIME_INVALID`, `ITEM_LIMIT_REACHED`
+  - `422 DATE_RANGE_INVALID`, `START_DATE_IN_PAST`, `ITEM_DATE_OUT_OF_RANGE`, `ITEM_TIME_INVALID`, `ITEM_LIMIT_REACHED`
 
   If any check fails, nothing is saved.
 
@@ -198,7 +199,7 @@ On failure, `data` is `null`:
   - `400 VALIDATION_ERROR`
   - `401 UNAUTHENTICATED`
   - `404 NOT_FOUND`
-  - `422 DATE_RANGE_INVALID`
+  - `422 DATE_RANGE_INVALID`, `START_DATE_IN_PAST` (only when `startDate` changes)
   - `422 ITEMS_OUT_OF_RANGE`, with `details` like:
 ```json
 [{ "field": "items", "message": "2 items fall outside the new dates", "itemIds": ["…", "…"] }]
@@ -249,6 +250,32 @@ On failure, `data` is `null`:
   - `422 ITEM_DATE_OUT_OF_RANGE`, `ITEM_TIME_INVALID`
 
   The time check runs on the merged result, i.e. the item's stored values combined with the patch.
+
+#### `PUT /trips/:tripId/items`
+- **Description:** Replace the trip's whole itinerary in one transaction. This is the **Update Trip** call on `/trips/:tripId`. Added 2026-10-10.
+- **Auth required:** Yes
+- **Request body:**
+```json
+{
+  "items": [
+    { "id": "5d1e…", "title": "Check in at hotel", "date": "2026-12-20", "startTime": "15:00", "endTime": null, "city": "Goa", "location": "Candolim", "notes": null },
+    { "title": "Sunset cruise", "date": "2026-12-23", "startTime": "17:30" }
+  ]
+}
+```
+  - Each entry is an `ItineraryItemInput` plus an optional `id`.
+  - With an `id`: that existing item is updated to exactly these values (omitted optional fields become `null`).
+  - Without an `id`: a new item is created.
+  - Existing items that are not listed are **deleted**. An empty list removes every item.
+  - Each `id` may appear at most once.
+- **Response body (200):** `{ "data": { "trip": TripDetail }, "error": null }`, with the items sorted per §2.
+- **Error cases:**
+  - `400 VALIDATION_ERROR` (paths like `items[3].title`; also a duplicated `id`)
+  - `401 UNAUTHENTICATED`
+  - `404 NOT_FOUND` (the trip, or an `id` that isn't an item of this trip)
+  - `422 ITEM_DATE_OUT_OF_RANGE`, `ITEM_TIME_INVALID`, `ITEM_LIMIT_REACHED` (messages name the item, e.g. `items[3]: …`)
+
+  If any check fails, nothing is saved.
 
 #### `DELETE /trips/:tripId/items/:itemId`
 - **Description:** Remove an item.
