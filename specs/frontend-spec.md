@@ -86,7 +86,7 @@ A React single-page application (SPA) that lets a logged-in user create trips an
 
 ## 7. API Integration
 <!-- Which endpoints each page/component calls (link to api-contract-spec.md). -->
-Exact request/response shapes are defined in api-contract-spec.md. All calls go to the relative base path `/api` (proxied to the AWS backend by Vercel in production and by Vite in local dev), with `credentials: 'include'`. Paths below are shown without the `/api` prefix. At a high level:
+Exact request/response shapes are defined in api-contract-spec.md. All calls go to the relative base path `/api` (proxied to the Render backend by Vercel in production and by Vite in local dev), with `credentials: 'include'`. Paths below are shown without the `/api` prefix. At a high level:
 - Welcome page calls `POST /auth/signup` and `POST /auth/login`.
 - Trip Dashboard calls `GET /trips`.
 - "Save Trip" (on `/trips/new/itinerary`) calls `POST /trips` with destination, dates, and the full list of itinerary items.
@@ -134,10 +134,10 @@ Exact request/response shapes are defined in api-contract-spec.md. All calls go 
 ## 13. Deployment
 - Hosted on **Vercel**: it builds the Vite app (`npm run build` → `dist/`) from the `/client` directory, with preview deployments for pull requests and production deploys from `main`.
 - `vercel.json` defines:
-  - a rewrite from `/api/:path*` to the AWS backend (the API Gateway default URL, `https://<api-id>.execute-api.<region>.amazonaws.com/:path*`), so API calls and the auth cookie stay same-origin;
+  - a rewrite from `/api/:path*` to the Render backend (`https://<service>.onrender.com/:path*`), so API calls and the auth cookie stay same-origin;
   - an SPA fallback rewrite from all other paths to `/index.html`, so React Router deep links (e.g. `/trips/123`) work on refresh.
 - No secrets live in the frontend. The backend URL is only in `vercel.json`, not in client code.
-- Preview deployments use different `*.vercel.app` origins. They still work because API calls go through each preview's own `/api` rewrite. Note: previews call the **production** backend, since there is no staging environment, so previews use real data.
+- Preview deployments use different `*.vercel.app` origins. They still work because API calls go through each preview's own `/api` rewrite. Note: previews call the **production** backend, since there is no staging environment, so previews use real data. The first request after the backend has been idle can take ~30–60 s (Render free-tier cold start).
 
 ## 14. CI
 - The `client` job in `.github/workflows/ci.yml` runs when `client/**` or `shared/**` changes: install → ESLint → `tsc --noEmit` → Vitest + React Testing Library → `vite build`. Full pipeline definition: backend-spec.md §15.

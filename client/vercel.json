@@ -1,6 +1,6 @@
 {
   "rewrites": [
-    { "source": "/api/:path*", "destination": "https://API_GATEWAY_URL_PLACEHOLDER/:path*" },
+    { "source": "/api/:path*", "destination": "https://tripforge-api.onrender.com/:path*" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
