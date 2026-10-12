@@ -55,7 +55,7 @@ Since this is a learning/portfolio project, success is measured by delivery and 
 
 ## 9. Milestones / Phasing
 <!-- MVP vs later phases, if applicable. -->
-- **Phase 1 (MVP)**: Create trip, add/edit/remove itinerary items, view itinerary, and share it read-only via a link — responsive on desktop and mobile. Basic auth (single user owns their trips).
+- **Phase 1 (MVP)** — ✅ **shipped 2026-10-12**, live at https://tripforge-alpha.vercel.app (all manual test scenarios A–H passed): Create trip, add/edit/remove itinerary items, view itinerary, and share it read-only via a link — responsive on desktop and mobile. Basic auth (single user owns their trips).
 - **Phase 2 (stretch, if time allows)**: Basic trip list/dashboard polish.
 - **Future / explicitly deferred**: Collaboration, budgeting, recommendations, notifications (see Non-Goals).
 

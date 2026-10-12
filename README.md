@@ -1,6 +1,34 @@
 # TripForge
 
-Plan trips with shared day-by-day itineraries. Specs live in [`specs/`](specs/) and are the source of truth.
+Plan trips with shared day-by-day itineraries.
+
+**Live:** https://tripforge-alpha.vercel.app (free hosting: the first request after ~15 minutes idle takes 30–60 s while the API wakes up).
+
+Built spec-first: the goal, frontend, backend, and API-contract specs in [`specs/`](specs/) are the source of truth, and every behavior change updates them before code. Decisions are logged in [`specs/goal-spec.md`](specs/goal-spec.md) §10.
+
+## Features
+
+- Email/password accounts (JWT in an httpOnly cookie)
+- Create trips with a day-by-day itinerary; new-trip drafts auto-save locally
+- Edit a saved itinerary with staged changes and a single **Update Trip** save
+- Dashboard with upcoming and past trips
+- Read-only share links that can be revoked
+- PDF and Excel export of an itinerary
+- Responsive on desktop and mobile
+
+## Architecture
+
+```
+Browser ──► Vercel (React SPA)
+              │  /api/* rewrite (same-origin, so the session cookie is first-party)
+              ▼
+            Render (Express API in Docker, Singapore)
+              │  Prisma + pg adapter, TLS
+              ▼
+            Neon (PostgreSQL 16, Singapore)
+```
+
+Stack: TypeScript everywhere, React 18 + Vite + Tailwind v4, Express 5 + Prisma 7, Zod schemas shared between client and server, Vitest + Supertest + React Testing Library, GitHub Actions CI.
 
 ## Layout
 
@@ -36,4 +64,6 @@ Checks: `npm run lint`, `npm run typecheck`, `npm test`, `npm run build`.
 - Database: Neon Postgres 16. Set `DATABASE_URL` (pooled) and `DIRECT_URL` (direct, for migrations) in Render.
 - Frontend: Vercel (Root Directory `client`); `client/vercel.json` proxies `/api` to the Render URL.
 
-Details: `specs/backend-spec.md` §14–15.
+Every change goes through a pull request; the `ci-ok` check gates merges and both deploys.
+
+Details: `specs/backend-spec.md` §14–15. Known limitations: `specs/backend-spec.md` §16.
