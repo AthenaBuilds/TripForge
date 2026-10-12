@@ -76,7 +76,7 @@ A REST API server that owns all persistent TripForge data. It handles user signu
   - Responses from `/shared/*` include the headers `X-Robots-Tag: noindex, nofollow`, `Cache-Control: no-store`, and `Referrer-Policy: no-referrer`, so shared trips aren't indexed by search engines or cached after revocation.
 - **Same-origin via Vercel rewrite:** the SPA is hosted on Vercel and calls the API at the relative path `/api/*`. A Vercel rewrite (`vercel.json`) proxies `/api/:path*` to the Render backend. From the browser's point of view, the cookie is first-party on the Vercel domain, so `SameSite=Lax` works and browsers that block third-party cookies (e.g. Safari) don't break login.
 - CORS: the browser never calls the backend's origin directly, so CORS is restricted to the Vercel production origin (and `http://localhost:5173` in local dev), with `credentials: true`. Locally, the Vite dev server proxies `/api` the same way.
-- Express sets `trust proxy` so it reads the client IP (for rate limiting) and the HTTPS scheme from `X-Forwarded-*` headers set by Vercel and Render's edge proxy. `TRUST_PROXY_HOPS` is set to the measured hop count in production.
+- Express sets `trust proxy` so it reads the client IP (for rate limiting) and the HTTPS scheme from `X-Forwarded-*` headers set by Vercel and Render's edge proxy. `TRUST_PROXY_HOPS` is set to the measured hop count in production: `4` (Vercel → Cloudflare → Render load balancer → Render local proxy), measured 2026-10-12 from `X-Forwarded-For`. Re-measure if the hosting path changes.
 
 ## 8. Third-Party Integrations
 <!-- External APIs/services (e.g. maps, weather, payments) and how they're used. -->
