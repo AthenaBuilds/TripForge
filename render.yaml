@@ -24,7 +24,7 @@ services:
       - key: LOG_LEVEL
         value: info
       - key: TRUST_PROXY_HOPS
-        value: '2'
+        value: '4'
       - key: CORS_ORIGIN
         sync: false
       - key: DATABASE_URL
