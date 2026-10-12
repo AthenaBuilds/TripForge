@@ -8,7 +8,7 @@ A REST API server that owns all persistent TripForge data. It handles user signu
 <!-- Language, framework, runtime, hosting. -->
 - Language: TypeScript
 - Framework: Express
-- Runtime/Hosting: Node.js 24 LTS (`node:24-alpine` base image) in a Docker container on **AWS** (ECS Fargate behind **Amazon API Gateway** HTTP API); see §14
+- Runtime/Hosting: Node.js 24 LTS (`node:24-alpine` base image) in a Docker container on **Render** (free web service); see §14
 - ORM: Prisma
 - Validation: Zod (request bodies, params, and query strings)
 - Auth: `jsonwebtoken` + `bcrypt`
@@ -43,7 +43,7 @@ A REST API server that owns all persistent TripForge data. It handles user signu
 
 ## 5. Database
 <!-- Database choice, schema migrations strategy, indexing considerations. -->
-- Database: PostgreSQL 16 (Docker locally; **Amazon RDS for PostgreSQL** in production, in a private subnet reachable only from the ECS service)
+- Database: PostgreSQL 16 (Docker locally; **Neon** serverless Postgres 16 in production, TLS required)
 - Migration tool: Prisma Migrate (`prisma migrate dev` locally, `prisma migrate deploy` in CI/production)
 - Indexes: `User.email` (unique), `Trip.shareSlug` (unique, nullable), `Trip.userId`, `ItineraryItem(tripId, date)`.
 - Foreign keys use `ON DELETE CASCADE` from Trip to ItineraryItem, so deleting a trip deletes its items.
@@ -74,9 +74,9 @@ A REST API server that owns all persistent TripForge data. It handles user signu
   - Revoking sets `shareSlug` back to `null`, and the old link immediately returns 404. Sharing again always generates a new slug; an old slug is never reused.
   - The public view never exposes `userId`, item IDs, the owner's email, or any internal timestamps other than `updatedAt`. It shows the owner's `name` as "Planned by …".
   - Responses from `/shared/*` include the headers `X-Robots-Tag: noindex, nofollow`, `Cache-Control: no-store`, and `Referrer-Policy: no-referrer`, so shared trips aren't indexed by search engines or cached after revocation.
-- **Same-origin via Vercel rewrite:** the SPA is hosted on Vercel and calls the API at the relative path `/api/*`. A Vercel rewrite (`vercel.json`) proxies `/api/:path*` to the AWS backend. From the browser's point of view, the cookie is first-party on the Vercel domain, so `SameSite=Lax` works and browsers that block third-party cookies (e.g. Safari) don't break login.
+- **Same-origin via Vercel rewrite:** the SPA is hosted on Vercel and calls the API at the relative path `/api/*`. A Vercel rewrite (`vercel.json`) proxies `/api/:path*` to the Render backend. From the browser's point of view, the cookie is first-party on the Vercel domain, so `SameSite=Lax` works and browsers that block third-party cookies (e.g. Safari) don't break login.
 - CORS: the browser never calls the backend's origin directly, so CORS is restricted to the Vercel production origin (and `http://localhost:5173` in local dev), with `credentials: true`. Locally, the Vite dev server proxies `/api` the same way.
-- Express sets `trust proxy` so it reads the client IP (for rate limiting) and the HTTPS scheme from `X-Forwarded-*` headers set by Vercel and API Gateway.
+- Express sets `trust proxy` so it reads the client IP (for rate limiting) and the HTTPS scheme from `X-Forwarded-*` headers set by Vercel and Render's edge proxy. `TRUST_PROXY_HOPS` is set to the measured hop count in production.
 
 ## 8. Third-Party Integrations
 <!-- External APIs/services (e.g. maps, weather, payments) and how they're used. -->
@@ -115,22 +115,23 @@ A REST API server that owns all persistent TripForge data. It handles user signu
 ## 14. Deployment & Infrastructure
 <!-- CI/CD, environments, hosting provider. -->
 - Environments: `local` (Docker Compose runs Postgres) and `production`. There is no staging environment.
-- **AWS production setup** (region e.g. `ap-south-1`):
-  - **ECR** stores the backend Docker image.
-  - **ECS Fargate** runs the service: 1 task (0.25 vCPU / 0.5 GB), in private subnets.
-  - **API Gateway (HTTP API)** is the public HTTPS entry point, using its default URL (`https://<api-id>.execute-api.<region>.amazonaws.com`). No custom domain or certificate is needed.
-  - A **VPC Link** connects API Gateway privately to the ECS service, which registers its tasks in **AWS Cloud Map** for service discovery. A single `ANY /{proxy+}` route forwards every request to Express. No load balancer is needed.
-  - API Gateway stage throttling (e.g. 50 req/s, burst 100) is a coarse backstop in front of the per-IP Express rate limits.
-  - **RDS PostgreSQL** (`db.t4g.micro`, single-AZ) in private subnets; its security group allows port 5432 only from the ECS service.
-  - **Secrets Manager** holds `DATABASE_URL` and `JWT_SECRET`, injected into the task as environment variables.
-  - **CloudWatch Logs** collects the pino JSON logs from the container.
-  - Infrastructure is defined as code with **AWS CDK (TypeScript)** in `/infra`.
+- **Production setup** (chosen 2026-10-12 because AWS and GCP accounts were not yet activated; see goal-spec.md §10):
+  - **Render** (free web service, Singapore region) builds and runs `server/Dockerfile` from the repo. Render gives a public HTTPS URL (`https://<service>.onrender.com`). No custom domain is needed.
+  - The service is defined as code in **`render.yaml`** (Render Blueprint) at the repo root. Secrets are marked `sync: false` and entered once in the Render dashboard; they are never committed.
+  - **Neon** (free plan, region nearest Singapore) hosts PostgreSQL 16. Two connection strings:
+    - `DATABASE_URL`: the **pooled** URL (PgBouncer, `-pooler` host), used by the app at runtime.
+    - `DIRECT_URL`: the **direct** URL, used only by `prisma migrate deploy` (migrations need a direct session). Both use `sslmode=require`.
+  - Migrations run at container start (`npm run start:prod` = `prisma migrate deploy` then `node dist/index.js`) because Render's free plan has no pre-deploy command. If a migration fails, the container exits and Render keeps the previous deploy live.
+  - Logs: Render's log stream collects the pino JSON logs.
+- `GET /health` returns `200` for Render's health check (`healthCheckPath: /health`); Render routes traffic to a new deploy only after it passes.
+- Free-tier trade-offs (accepted for a portfolio project):
+  - Render free services spin down after ~15 minutes idle; the next request takes ~30–60 s (cold start). Neon also autosuspends compute when idle.
+  - No platform-level rate limiting; the per-IP Express rate limits are the only throttle.
+- Portability: the same image can move to AWS (ECS Fargate + RDS) or GCP (Cloud Run) later; only `DATABASE_URL`/`DIRECT_URL` and the deploy config change.
 - CI/CD details are in §15.
-- `GET /health` returns `200` for ECS container health checks.
-- Cost note: RDS is the main ongoing cost (API Gateway HTTP API is billed per request and is negligible at this scale) (RDS is covered by the free tier for the first 12 months on eligible accounts). Tear the stack down with `cdk destroy` when not in use.
 
 ## 15. CI/CD
-All pipelines run on **GitHub Actions**. The repo is a monorepo (`/client`, `/server`, `/shared`, `/infra`), and each job runs only when its paths change.
+All pipelines run on **GitHub Actions**. The repo is a monorepo (`/client`, `/server`, `/shared`), and each job runs only when its paths change.
 
 **Branch workflow**
 - `main` is protected: no direct pushes. All changes go through a pull request, and merging requires the required CI checks to pass.
@@ -139,29 +140,17 @@ All pipelines run on **GitHub Actions**. The repo is a monorepo (`/client`, `/se
 **CI — `.github/workflows/ci.yml`** (runs on every pull request and every push to `main`)
 | Job | Runs when these paths change | Steps |
 |-----|------------------------------|-------|
-| `server` | `server/**`, `shared/**` | install → lint → type-check → `prisma migrate deploy` against a Postgres service container → Vitest (unit + Supertest integration) |
+| `server` | `server/**`, `shared/**` | install → lint → type-check → `prisma migrate deploy` against a Postgres service container → Vitest (unit + Supertest integration) → build → production Docker image build |
 | `client` | `client/**`, `shared/**` | install → lint → type-check → Vitest + React Testing Library → `vite build` |
-| `infra` | `infra/**` | install → type-check → `cdk synth` → `cdk diff` against production, posted as a PR comment (read-only AWS role) |
 | `ci-ok` | always | Gate job that passes only when every job above passed or was skipped. Branch protection requires only this check, so path filtering doesn't block merges. |
 
 - Dependencies are cached through `actions/setup-node` (npm cache). Node 24 everywhere: CI (`node-version: 24`), the Docker image, Vercel builds, and `engines.node: ">=24 <25"` in the root `package.json`, plus an `.nvmrc` file.
 
-**Backend CD — `.github/workflows/deploy-backend.yml`**
-- Trigger: the CI workflow completes successfully on `main` and the push changed `server/**` or `shared/**`. It can also be run manually (`workflow_dispatch`).
-- Steps:
-  1. Build the Docker image, tagged with the git SHA.
-  2. Push the image to ECR.
-  3. Run `prisma migrate deploy` as a one-off ECS task using the new image. The deploy stops if the migration fails.
-  4. Update the ECS service to the new task definition and wait until the service is stable.
-  5. Smoke-test `GET /health` through the API Gateway URL.
-- AWS access uses GitHub **OIDC**: a deploy role scoped to ECR, ECS, and passing the task role. There are no long-lived AWS keys.
-- Uses a GitHub Environment named `production`, so deployments are tracked. Only one deploy runs at a time (`concurrency: deploy-backend`).
-- Rollback: re-run the workflow for the previous good SHA, or point the ECS service back to the previous task definition revision. ECS deployment circuit breaker with automatic rollback is turned on.
-
-**Infrastructure CD — `.github/workflows/deploy-infra.yml`**
-- Trigger: manual only (`workflow_dispatch`). Infrastructure changes (VPC, RDS, API Gateway) are rare and risky, so they are never applied automatically on merge.
-- Runs `cdk deploy` with the `production` GitHub Environment, which requires manual approval. The PR comment from the CI `infra` job shows the diff before approval.
-- The RDS instance has deletion protection and `RemovalPolicy.SNAPSHOT`, so a bad CDK change can't silently delete data.
+**Backend CD — Render auto-deploy**
+- Render watches `main` with `autoDeployTrigger: checksPass`: it deploys only after the GitHub checks (including `ci-ok`) pass on the new commit. Build filters (`server/**`, `shared/**`, `package*.json`, `render.yaml`) skip deploys for frontend-only changes.
+- Render builds the Docker image itself, so no registry or cloud credentials are stored in GitHub.
+- Manual deploys and rollbacks are done from the Render dashboard (redeploy any previous deploy).
+- A failed health check or failed migration leaves the previous deploy serving traffic.
 
 **Frontend CD** is handled by Vercel (see frontend-spec.md §13). Vercel waits for the GitHub `ci-ok` check before promoting a production deployment.
 
@@ -171,7 +160,7 @@ All pipelines run on **GitHub Actions**. The repo is a monorepo (`/client`, `/se
 - Database migrations must be **expand-then-contract**. Each migration must work with both the currently running code and the new code. Destructive changes (dropping or renaming columns) wait for a later release.
 
 **Secrets**
-- GitHub stores only non-secret identifiers (the AWS account ID and the role ARN) as variables. App secrets stay in AWS Secrets Manager.
+- `DATABASE_URL`, `DIRECT_URL`, and `JWT_SECRET` live only in Render's environment settings (`JWT_SECRET` generated by Render). GitHub stores no deploy secrets.
 
 ## 16. Open Questions
 - None currently. Resolved decisions are logged in goal-spec.md §10.

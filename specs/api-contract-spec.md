@@ -3,7 +3,7 @@
 ## 1. Overview
 <!-- Summary of the API surface (REST/GraphQL/etc), base URL, versioning strategy. -->
 - Protocol: REST over HTTPS, JSON request and response bodies. The only exception is the export endpoint, which returns a binary file.
-- Base URL: `/api`, relative to the frontend origin. Vercel forwards these requests to the AWS API Gateway URL in production, and the Vite dev server forwards them to `http://localhost:3000` locally. All paths below are relative to `/api`.
+- Base URL: `/api`, relative to the frontend origin. Vercel forwards these requests to the Render backend URL in production, and the Vite dev server forwards them to `http://localhost:3000` locally. All paths below are relative to `/api`.
 - Versioning strategy: none for the MVP (single client, deployed together). If a breaking change is ever needed, a `/api/v2` prefix will be introduced, rather than changing the existing endpoints in place.
 
 ## 2. Conventions
@@ -72,7 +72,7 @@ On failure, `data` is `null`:
 
 ### 6.1 Health
 #### `GET /health`
-- **Description:** Liveness check for ECS health checks and smoke tests.
+- **Description:** Liveness check for Render health checks and smoke tests.
 - **Auth required:** No
 - **Response body (200):**
 ```json
@@ -423,7 +423,7 @@ type ApiError = {
   - `/shared/*` (public): 60 requests per minute.
   - All other endpoints: 100 requests per minute.
 - When a limit is exceeded, the API returns `429 RATE_LIMITED` with a `Retry-After` header (in seconds) and the `RateLimit-*` headers (draft-7).
-- API Gateway stage throttling (50 req/s, burst 100) acts as a coarse global backstop. When it triggers, API Gateway returns its own `429` without our envelope; the frontend treats any 429 as "try again shortly".
+- The frontend treats any 429 as "try again shortly", including a 429 from the hosting platform without our envelope.
 
 ## 9. Webhooks / Callbacks (if any)
 - None.
