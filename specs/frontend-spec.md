@@ -134,7 +134,7 @@ Exact request/response shapes are defined in api-contract-spec.md. All calls go 
 ## 13. Deployment
 - Hosted on **Vercel**: it builds the Vite app (`npm run build` → `dist/`) from the `/client` directory, with preview deployments for pull requests and production deploys from `main`.
 - `vercel.json` defines:
-  - a rewrite from `/api/:path*` to the Cloud Run backend (`https://tripforge-api-<hash>.asia-southeast1.run.app/:path*`), so API calls and the auth cookie stay same-origin;
+  - a rewrite from `/api/:path*` to the Cloud Run backend (`https://tripforge-api-201572810260.asia-southeast1.run.app/:path*`), so API calls and the auth cookie stay same-origin;
   - an SPA fallback rewrite from all other paths to `/index.html`, so React Router deep links (e.g. `/trips/123`) work on refresh.
 - No secrets live in the frontend. The backend URL is only in `vercel.json`, not in client code.
 - Preview deployments use different `*.vercel.app` origins. They still work because API calls go through each preview's own `/api` rewrite. Note: previews call the **production** backend, since there is no staging environment, so previews use real data. The first request after the backend has been idle can take a few seconds (Cloud Run cold start).

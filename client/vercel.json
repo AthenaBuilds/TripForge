@@ -1,6 +1,6 @@
 {
   "rewrites": [
-    { "source": "/api/:path*", "destination": "https://tripforge-api-fnis.onrender.com/:path*" },
+    { "source": "/api/:path*", "destination": "https://tripforge-api-201572810260.asia-southeast1.run.app/:path*" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

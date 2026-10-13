@@ -116,7 +116,7 @@ A REST API server that owns all persistent TripForge data. It handles user signu
 <!-- CI/CD, environments, hosting provider. -->
 - Environments: `local` (Docker Compose runs Postgres) and `production`. There is no staging environment.
 - **Production setup** (moved from Render to Cloud Run on 2026-10-13 to remove the ~45 s cold starts; see goal-spec.md §10):
-  - **Google Cloud Run** runs `server/Dockerfile` as the service `tripforge-api` in the existing GCP project `project-e5876b6a-ef84-4b68-a0d`, region **`asia-southeast1` (Singapore)**. This is the same region as the Neon database, which keeps every query in one region. Cloud Run gives a public HTTPS URL (`https://tripforge-api-<hash>.asia-southeast1.run.app`). No custom domain is needed.
+  - **Google Cloud Run** runs `server/Dockerfile` as the service `tripforge-api` in the existing GCP project `project-e5876b6a-ef84-4b68-a0d`, region **`asia-southeast1` (Singapore)**. This is the same region as the Neon database, which keeps every query in one region. Cloud Run gives a public HTTPS URL (`https://tripforge-api-201572810260.asia-southeast1.run.app`). No custom domain is needed.
   - Service settings:
     - Public (`allUsers` has `roles/run.invoker`) with ingress `all`, because Vercel's rewrite calls the API over the public internet. The app does its own auth (§7).
     - That invoker grant is a one-time step by the project owner, not part of the deploy: the deployer's `roles/run.developer` cannot change IAM, and should not be able to.
