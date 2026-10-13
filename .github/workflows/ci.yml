@@ -35,6 +35,7 @@ jobs:
               - 'shared/**'
               - 'package*.json'
               - '.github/workflows/deploy-api.yml'
+              - '.github/workflows/ci.yml'
             client:
               - 'client/**'
               - 'shared/**'
@@ -105,7 +106,11 @@ jobs:
   # Backend CD: deploy to Cloud Run after every required check passed on main (backend-spec §15).
   deploy-api:
     needs: [changes, ci-ok]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.changes.outputs.deploy-api == 'true'
+    # always() stops a skipped upstream job (e.g. client) from skipping this one; ci-ok is the real gate.
+    if: >-
+      always() && needs.ci-ok.result == 'success' &&
+      github.event_name == 'push' && github.ref == 'refs/heads/main' &&
+      needs.changes.outputs.deploy-api == 'true'
     permissions:
       contents: read
       id-token: write
