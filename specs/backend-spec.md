@@ -151,11 +151,13 @@ All pipelines run on **GitHub Actions**. The repo is a monorepo (`/client`, `/se
 **CI — `.github/workflows/ci.yml`** (runs on every pull request and every push to `main`)
 | Job | Runs when these paths change | Steps |
 |-----|------------------------------|-------|
-| `server` | `server/**`, `shared/**`, `.dockerignore`, `package-lock.json` | install → lint → type-check → `prisma migrate deploy` against a Postgres service container → Vitest (unit + Supertest integration) → build → production Docker image build |
-| `client` | `client/**`, `shared/**` | install → lint → type-check → Vitest + React Testing Library → `vite build` |
+| `server` | `server/**`, `shared/**`, `.dockerignore`, `package-lock.json`, `.github/workflows/ci.yml` | install → lint → type-check → `prisma migrate deploy` against a Postgres service container → Vitest (unit + Supertest integration) → build → production Docker image build |
+| `client` | `client/**`, `shared/**`, `package-lock.json`, `.github/workflows/ci.yml` | install → lint → type-check → Vitest + React Testing Library → `vite build` |
 | `ci-ok` | always | Gate job that passes only when every job above passed or was skipped. Branch protection requires only this check, so path filtering doesn't block merges. |
 
 - Dependencies are cached through `actions/setup-node` (npm cache). Node 24 everywhere: CI (`node-version: 24`), the Docker image, Vercel builds, and `engines.node: ">=24 <25"` in the root `package.json`, plus an `.nvmrc` file.
+- A change to `ci.yml` runs every job, so CI changes are tested end to end before they merge.
+- **Actions and runners.** Every action is on a major version that runs on Node 24: `actions/checkout@v7`, `actions/setup-node@v7`, `dorny/paths-filter@v4`, `google-github-actions/auth@v3`, `google-github-actions/setup-gcloud@v3`. Jobs use `runs-on: ubuntu-latest`. When GitHub moves that label to a new Ubuntu release (Ubuntu 26.04 from 2026-10-19), the full CI is first run once on the new image by pinning `runs-on` in a pull request, then switched back to `ubuntu-latest`.
 
 **Backend CD — `.github/workflows/deploy-api.yml` (Cloud Run)**
 - **Trigger:** a `deploy-api` job at the end of `ci.yml` calls the reusable workflow `deploy-api.yml`.
