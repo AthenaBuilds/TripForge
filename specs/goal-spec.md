@@ -49,7 +49,7 @@ Since this is a learning/portfolio project, success is measured by delivery and 
 - Single developer, built incrementally alongside spec work.
 - No fixed deadline; scope is intentionally small to stay achievable.
 - Must work well on both desktop and mobile via responsive web design — no native mobile app in this version.
-- Hosting: frontend on Vercel, backend API on Render, PostgreSQL on Neon — details in frontend-spec.md and backend-spec.md.
+- Hosting: frontend on Vercel, backend API on Google Cloud Run, PostgreSQL on Neon — details in frontend-spec.md and backend-spec.md.
 - CI/CD from day one: every change goes through a pull request with automated checks (lint, type-check, tests, build) before merging to `main`, and merges to `main` deploy automatically (backend-spec.md §15).
 - Assumes single-user ownership of a trip for this version; participants view it through a read-only share link (no shared editing permissions model needed).
 
@@ -70,6 +70,19 @@ Since this is a learning/portfolio project, success is measured by delivery and 
 - **2026-10-10 — Editing a saved trip's itinerary (from manual testing):** item adds, edits, and removals on `/trips/:tripId` are held on the page until the user clicks **Update Trip**, which saves them all at once (`PUT /trips/:tripId/items`, one transaction). **Discard changes** drops them, and leaving the page with unsaved changes asks for confirmation. Previously each change was saved immediately, which testers found unclear.
 - **2026-10-10 — No trips starting in the past:** a new trip's start date must be today or later, and changing an existing trip's start date cannot move it into the past. An ongoing trip whose (unchanged) start date is already past can still be edited. The frontend uses the user's local date; the backend allows one day of slack for time zones (`START_DATE_IN_PAST`).
 - **2026-10-12 — Production hosting: Render + Neon instead of AWS:** the AWS account and the GCP billing account were both still waiting on activation, so the MVP deploys on free tiers that need no card: the API on a Render free web service (Docker, Singapore) and Postgres 16 on Neon free. Accepted trade-off: cold starts of ~30–60 s after idle. The Docker image stays cloud-neutral, so moving to AWS or GCP later only changes deploy config (backend-spec.md §14–15).
+- **2026-10-13 — Production API moves from Render to Google Cloud Run:** in a test, the Render free service took ~46 s to answer after idle and 0.3 s when warm, which made the site feel broken. The GCP billing account is now active.
+  - Setup: the API runs on Cloud Run in the existing project, region `asia-southeast1` (beside Neon). It scales to zero with at most 2 instances. Deploys come from GitHub Actions using keyless Workload Identity Federation, and secrets are in Secret Manager. Neon and Vercel are unchanged.
+  - Expected cost is $0 a month within the free tier, guarded by the instance cap, an Artifact Registry cleanup policy, and a $5 budget alert.
+  - Alternatives rejected:
+    - Keeping Render with a GitHub Actions keep-alive ping: it is unreliable, because scheduled runs are delayed, and it goes against the spirit of Render's free plan.
+    - GitHub Pages: it serves static files only and can't run the API.
+    - Render Starter at $7 a month.
+  - Cutover plan:
+    1. Deploy to Cloud Run and smoke-test it directly.
+    2. Measure `TRUST_PROXY_HOPS`.
+    3. Point `client/vercel.json` at the new URL.
+    4. Run the end-to-end test A–H.
+    5. Delete the Render service and `render.yaml`.
 
 ## 11. Open Questions
 <!-- Unresolved decisions to track. -->

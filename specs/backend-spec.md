@@ -8,7 +8,7 @@ A REST API server that owns all persistent TripForge data. It handles user signu
 <!-- Language, framework, runtime, hosting. -->
 - Language: TypeScript
 - Framework: Express
-- Runtime/Hosting: Node.js 24 LTS (`node:24-alpine` base image) in a Docker container on **Render** (free web service); see §14
+- Runtime/Hosting: Node.js 24 LTS (`node:24-alpine` base image) in a Docker container on **Google Cloud Run** (scale-to-zero, free tier); see §14
 - ORM: Prisma
 - Validation: Zod (request bodies, params, and query strings)
 - Auth: `jsonwebtoken` + `bcrypt`
@@ -74,9 +74,9 @@ A REST API server that owns all persistent TripForge data. It handles user signu
   - Revoking sets `shareSlug` back to `null`, and the old link immediately returns 404. Sharing again always generates a new slug; an old slug is never reused.
   - The public view never exposes `userId`, item IDs, the owner's email, or any internal timestamps other than `updatedAt`. It shows the owner's `name` as "Planned by …".
   - Responses from `/shared/*` include the headers `X-Robots-Tag: noindex, nofollow`, `Cache-Control: no-store`, and `Referrer-Policy: no-referrer`, so shared trips aren't indexed by search engines or cached after revocation.
-- **Same-origin via Vercel rewrite:** the SPA is hosted on Vercel and calls the API at the relative path `/api/*`. A Vercel rewrite (`vercel.json`) proxies `/api/:path*` to the Render backend. From the browser's point of view, the cookie is first-party on the Vercel domain, so `SameSite=Lax` works and browsers that block third-party cookies (e.g. Safari) don't break login.
+- **Same-origin via Vercel rewrite:** the SPA is hosted on Vercel and calls the API at the relative path `/api/*`. A Vercel rewrite (`vercel.json`) proxies `/api/:path*` to the Cloud Run backend. From the browser's point of view, the cookie is first-party on the Vercel domain, so `SameSite=Lax` works and browsers that block third-party cookies (e.g. Safari) don't break login.
 - CORS: the browser never calls the backend's origin directly, so CORS is restricted to the Vercel production origin (and `http://localhost:5173` in local dev), with `credentials: true`. Locally, the Vite dev server proxies `/api` the same way.
-- Express sets `trust proxy` so it reads the client IP (for rate limiting) and the HTTPS scheme from `X-Forwarded-*` headers set by Vercel and Render's edge proxy. `TRUST_PROXY_HOPS` is set to the measured hop count in production: `4` (Vercel → Cloudflare → Render load balancer → Render local proxy), measured 2026-10-12 from `X-Forwarded-For`. Re-measure if the hosting path changes.
+- Express sets `trust proxy` so it reads the client IP (for rate limiting) and the HTTPS scheme from `X-Forwarded-*` headers set by Vercel and Google's front end. `TRUST_PROXY_HOPS` is set to the measured hop count in production. It was `4` on Render (measured 2026-10-12). The Cloud Run path (Vercel → Google Front End) has fewer hops, so it must be measured again from `X-Forwarded-For` after the first Cloud Run deploy and set before cutover.
 
 ## 8. Third-Party Integrations
 <!-- External APIs/services (e.g. maps, weather, payments) and how they're used. -->
@@ -115,20 +115,27 @@ A REST API server that owns all persistent TripForge data. It handles user signu
 ## 14. Deployment & Infrastructure
 <!-- CI/CD, environments, hosting provider. -->
 - Environments: `local` (Docker Compose runs Postgres) and `production`. There is no staging environment.
-- **Production setup** (chosen 2026-10-12 because AWS and GCP accounts were not yet activated; see goal-spec.md §10):
-  - **Render** (free web service, Singapore region) builds and runs `server/Dockerfile` from the repo. Render gives a public HTTPS URL (`https://<service>.onrender.com`). No custom domain is needed.
-  - The service settings are recorded in **`render.yaml`** (Render Blueprint format) at the repo root. Secrets are marked `sync: false` and entered once in the Render dashboard; they are never committed.
-  - The production service (`tripforge-api-fnis.onrender.com`) was created through the Render API with the same settings rather than as a linked Blueprint, so Render does not read `render.yaml`. Keep the dashboard settings and `render.yaml` in sync by hand.
-  - **Neon** (free plan, region nearest Singapore) hosts PostgreSQL 16. Two connection strings:
+- **Production setup** (moved from Render to Cloud Run on 2026-10-13 to remove the ~45 s cold starts; see goal-spec.md §10):
+  - **Google Cloud Run** runs `server/Dockerfile` as the service `tripforge-api` in the existing GCP project `project-e5876b6a-ef84-4b68-a0d`, region **`asia-southeast1` (Singapore)**. This is the same region as the Neon database, which keeps every query in one region. Cloud Run gives a public HTTPS URL (`https://tripforge-api-<hash>.asia-southeast1.run.app`). No custom domain is needed.
+  - Service settings:
+    - `--allow-unauthenticated` with ingress `all`, because Vercel's rewrite calls the API over the public internet. The app does its own auth (§7).
+    - Min instances `0` (scale to zero, so it stays in the free tier) and max instances `2` (a hard cap on cost and on Neon connections).
+    - 1 vCPU, 512 MiB, concurrency 80, request-based billing (CPU only while handling requests), and startup CPU boost.
+    - Startup probe: HTTP `GET /health`.
+  - A dedicated runtime service account `tripforge-run@…` holds only `roles/secretmanager.secretAccessor` on the three app secrets. It is not the default compute service account.
+  - **Artifact Registry**: a Docker repo `tripforge` in `asia-southeast1`. Images are tagged with the git commit SHA. A cleanup policy keeps the newest 5 images so storage stays under the 0.5 GB free allowance.
+  - **Secret Manager** holds `DATABASE_URL`, `DIRECT_URL`, and `JWT_SECRET`, mounted as environment variables. Non-secret settings (`NODE_ENV`, `LOG_LEVEL`, `TRUST_PROXY_HOPS`, `CORS_ORIGIN`) are plain environment variables set at deploy.
+  - **Neon** (free plan, Singapore) hosts PostgreSQL 16, unchanged from the Render setup. Two connection strings:
     - `DATABASE_URL`: the **pooled** URL (PgBouncer, `-pooler` host), used by the app at runtime.
     - `DIRECT_URL`: the **direct** URL, used only by `prisma migrate deploy` (migrations need a direct session). Both use `sslmode=require`.
-  - Migrations run at container start (`npm run start:prod` = `prisma migrate deploy` then `node dist/index.js`) because Render's free plan has no pre-deploy command. If a migration fails, the container exits and Render keeps the previous deploy live.
-  - Logs: Render's log stream collects the pino JSON logs.
-- `GET /health` returns `200` for Render's health check (`healthCheckPath: /health`); Render routes traffic to a new deploy only after it passes.
-- Free-tier trade-offs (accepted for a portfolio project):
-  - Render free services spin down after ~15 minutes idle; the next request takes ~30–60 s (cold start). Neon also autosuspends compute when idle.
-  - No platform-level rate limiting; the per-IP Express rate limits are the only throttle.
-- Portability: the same image can move to AWS (ECS Fargate + RDS) or GCP (Cloud Run) later; only `DATABASE_URL`/`DIRECT_URL` and the deploy config change.
+  - Migrations still run at container start (`npm run start:prod` = `prisma migrate deploy`, then `node dist/index.js`). If a migration fails, the new revision fails its startup probe and Cloud Run keeps serving the previous revision. Prisma's migration lock makes it safe if two instances start at once.
+  - Logs: Cloud Logging collects the pino JSON logs from stdout. Severity is read from the JSON.
+- Cold starts: a scaled-to-zero instance starts in a few seconds (container start, plus Neon waking from autosuspend, about 1 s). This replaces Render's 30–60 s.
+- **Cost guardrails.** Expected cost is $0 a month within the free tier: 2M requests, 180k vCPU-seconds, and 360k GiB-seconds per billing account per month, plus 0.5 GB of Artifact Registry storage and 6 active secret versions.
+  - The max-instances cap of `2` limits how far a traffic spike can scale.
+  - A **Cloud Billing budget of $5 a month** sends email alerts at 50%, 90%, and 100%.
+  - Min instances is never raised above 0, because an always-on instance is billed continuously.
+- Portability: the image stays cloud-neutral, so only the deploy config changes if the API moves again.
 - CI/CD details are in §15.
 
 ## 15. CI/CD
@@ -147,11 +154,20 @@ All pipelines run on **GitHub Actions**. The repo is a monorepo (`/client`, `/se
 
 - Dependencies are cached through `actions/setup-node` (npm cache). Node 24 everywhere: CI (`node-version: 24`), the Docker image, Vercel builds, and `engines.node: ">=24 <25"` in the root `package.json`, plus an `.nvmrc` file.
 
-**Backend CD — Render auto-deploy**
-- Render watches `main` with `autoDeployTrigger: checksPass`: it deploys only after the GitHub checks (including `ci-ok`) pass on the new commit. Build filters (`server/**`, `shared/**`, `package*.json`, `render.yaml`) skip deploys for frontend-only changes.
-- Render builds the Docker image itself, so no registry or cloud credentials are stored in GitHub.
-- Manual deploys and rollbacks are done from the Render dashboard (redeploy any previous deploy).
-- A failed health check or failed migration leaves the previous deploy serving traffic.
+**Backend CD — `.github/workflows/deploy-api.yml` (Cloud Run)**
+- **Trigger:** `workflow_run` on CI completing for a push to `main`. The deploy job runs only when CI concluded `success` and the commit changed `server/**`, `shared/**`, `package*.json`, or the workflow file. It also has a manual `workflow_dispatch` trigger. Concurrency group `deploy-api` (no cancel-in-progress) so deploys never overlap.
+- **Auth: Workload Identity Federation (keyless).** No service-account JSON key exists anywhere.
+  - A workload identity pool `github` with an OIDC provider for `token.actions.githubusercontent.com`. Its attribute condition limits it to `assertion.repository == 'AthenaBuilds/TripForge'` and `assertion.ref == 'refs/heads/main'`.
+  - That provider may impersonate one deployer service account, `tripforge-deployer@…`, which has:
+    - `roles/run.developer`
+    - `roles/artifactregistry.writer` on the `tripforge` repo
+    - `roles/iam.serviceAccountUser` on the runtime service account only
+- **Steps:**
+  1. `google-github-actions/auth`.
+  2. Build `server/Dockerfile` and push it to Artifact Registry, tagged with the commit SHA.
+  3. `gcloud run deploy` with the settings in §14.
+  4. Smoke test: `curl` the new revision's `/health` and fail the job if it doesn't return 200.
+- **Rollback:** `gcloud run services update-traffic tripforge-api --to-revisions=<previous>=100`, or the Cloud Run console. A revision that fails its startup probe never receives traffic.
 
 **Frontend CD** is handled by Vercel (see frontend-spec.md §13). Vercel waits for the GitHub `ci-ok` check before promoting a production deployment.
 
@@ -161,11 +177,12 @@ All pipelines run on **GitHub Actions**. The repo is a monorepo (`/client`, `/se
 - Database migrations must be **expand-then-contract**. Each migration must work with both the currently running code and the new code. Destructive changes (dropping or renaming columns) wait for a later release.
 
 **Secrets**
-- `DATABASE_URL`, `DIRECT_URL`, and `JWT_SECRET` live only in Render's environment settings (`JWT_SECRET` generated by Render). GitHub stores no deploy secrets.
+- `DATABASE_URL`, `DIRECT_URL`, and `JWT_SECRET` live only in GCP Secret Manager. `JWT_SECRET` is newly generated for Cloud Run, so every user signs in once more after cutover.
+- GitHub stores no deploy secrets. The WIF provider resource name, the deployer service-account email, the project ID, and the region are stored as repository **variables**, because none of them are secret.
 
 ## 16. Known Limitations
 - PDF export uses the built-in Helvetica font (WinAnsi encoding), so non-Latin text (e.g. Devanagari, CJK) does not render. Fixing this needs an embedded Unicode font.
-- Free-tier hosting: cold starts of ~30–60 s after ~15 minutes idle (Render), and Neon compute autosuspends.
+- Scale-to-zero hosting: the first request after idle takes a few seconds (Cloud Run cold start plus Neon resume).
 - Preview deployments on Vercel call the production API (no staging environment).
 
 ## 17. Open Questions
