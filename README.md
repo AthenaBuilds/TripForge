@@ -2,7 +2,7 @@
 
 Plan trips with shared day-by-day itineraries.
 
-**Live:** https://tripforge-alpha.vercel.app (free hosting: the first request after ~15 minutes idle takes 30–60 s while the API wakes up).
+**Live:** https://tripforge-alpha.vercel.app (the API scales to zero, so the first request after idle takes a few seconds while it starts).
 
 Built spec-first: the goal, frontend, backend, and API-contract specs in [`specs/`](specs/) are the source of truth, and every behavior change updates them before code. Decisions are logged in [`specs/goal-spec.md`](specs/goal-spec.md) §10.
 
@@ -28,15 +28,18 @@ Browser ──► Vercel (React SPA)
             Neon (PostgreSQL 16, Singapore)
 ```
 
-Stack: TypeScript everywhere, React 18 + Vite + Tailwind v4, Express 5 + Prisma 7, Zod schemas shared between client and server, Vitest + Supertest + React Testing Library, GitHub Actions CI.
+Stack: TypeScript everywhere, React 18 + Vite + Tailwind v4, Express 5 + Prisma 7, Zod schemas shared between client and server, Vitest + Supertest + React Testing Library, GitHub Actions CI/CD.
 
 ## Layout
 
-| Path      | What                                       |
-| --------- | ------------------------------------------ |
-| `client/` | React 18 + Vite + Tailwind SPA             |
-| `server/` | Express + Prisma REST API                  |
-| `shared/` | Zod schemas and types shared by both sides |
+| Path                 | What                                                             |
+| -------------------- | ---------------------------------------------------------------- |
+| `client/`            | React 18 + Vite + Tailwind SPA                                   |
+| `server/`            | Express + Prisma REST API                                        |
+| `shared/`            | Zod schemas and types shared by both sides                       |
+| `specs/`             | Goal, frontend, backend and API-contract specs (source of truth) |
+| `scripts/`           | Test-DB init SQL and the one-time GCP setup script               |
+| `.github/workflows/` | CI (`ci.yml`) and the Cloud Run deploy (`deploy-api.yml`)        |
 
 ## Local development
 
@@ -60,11 +63,37 @@ Checks: `npm run lint`, `npm run typecheck`, `npm test`, `npm run build`.
 
 ## Deployment
 
-- API: Google Cloud Run (`asia-southeast1`), built from `server/Dockerfile`. CI deploys it from `main` after `ci-ok` passes (`.github/workflows/deploy-api.yml`, keyless via Workload Identity Federation).
-- Database: Neon Postgres 16. `DATABASE_URL` (pooled) and `DIRECT_URL` (direct, for migrations) live in GCP Secret Manager.
-- Frontend: Vercel (Root Directory `client`); `client/vercel.json` proxies `/api` to the Cloud Run URL.
-- One-time GCP setup (APIs, service accounts, registry, IAM, WIF, secrets, budget): `scripts/gcp-setup.sh`, run by a project owner. Re-run it to rotate the Neon URLs.
+| Part     | Where                                                        | URL                                                        |
+| -------- | ------------------------------------------------------------ | ---------------------------------------------------------- |
+| Frontend | Vercel (Root Directory `client`)                             | https://tripforge-alpha.vercel.app                         |
+| API      | Google Cloud Run, service `tripforge-api`, `asia-southeast1` | https://tripforge-api-201572810260.asia-southeast1.run.app |
+| Database | Neon Postgres 16 (free plan, Singapore)                      | —                                                          |
 
-Every change goes through a pull request; the `ci-ok` check gates merges and both deploys.
+The browser only talks to Vercel: `client/vercel.json` rewrites `/api/*` to the Cloud Run URL, so the session cookie stays first-party.
+
+### How a change ships
+
+1. Open a pull request. CI (`.github/workflows/ci.yml`) runs lint, type-check, tests and builds for the parts that changed (all jobs when `ci.yml` itself changes). The `ci-ok` check gates the merge.
+2. Merge to `main`.
+   - **API:** if `server/`, `shared/`, package files or the workflows changed, CI calls `deploy-api.yml` after `ci-ok` passes. It signs in to GCP with Workload Identity Federation (no stored keys), builds `server/Dockerfile`, pushes the image to Artifact Registry tagged with the commit SHA, deploys it to Cloud Run, and fails unless `/health` returns 200.
+   - **Frontend:** Vercel builds `client/` and promotes it after `ci-ok` passes.
+3. Migrations run when the new container starts (`prisma migrate deploy`). A revision that fails to start never gets traffic, so the previous one keeps serving.
+
+Redeploy by hand: **Actions → Deploy API → Run workflow** (branch `main`).
+
+Roll back the API: `gcloud run services update-traffic tripforge-api --region=asia-southeast1 --to-revisions=<previous-revision>=100`, or use the Cloud Run console.
+
+### Configuration
+
+- **Secrets** (`DATABASE_URL` pooled, `DIRECT_URL` direct for migrations, `JWT_SECRET`) live only in GCP Secret Manager. Each Neon URL is stored as the bare `postgresql://…` string.
+- **GitHub repository variables** (one per name, no surrounding spaces): `GCP_PROJECT_ID`, `GCP_REGION`, `GCP_WIF_PROVIDER`, `GCP_DEPLOYER_SA`, `CORS_ORIGIN`, `TRUST_PROXY_HOPS` (`2`: Vercel edge + Google front end). The deploy job runs in the `production` environment.
+
+### First-time setup or secret rotation
+
+Run `scripts/gcp-setup.sh` as a GCP project owner. It is idempotent and creates or updates the APIs, service accounts, Artifact Registry repo, IAM, Workload Identity Federation, secrets (hidden prompts) and budget, then prints the GitHub variables to add. After the first deploy, make the service public once with the `gcloud run services add-iam-policy-binding … --member=allUsers --role=roles/run.invoker` command it prints. To rotate the Neon password, re-run it with the new URLs, redeploy, then destroy the old secret versions.
+
+### Cost guardrails
+
+Expected cost is $0 a month on free tiers: Cloud Run scales to zero (max 2 instances), Artifact Registry keeps the newest 2 images, only the latest version of each secret stays active, and a ₹450 (about $5) monthly budget sends alerts at 50%, 90% and 100%.
 
 Details: `specs/backend-spec.md` §14–15. Known limitations: `specs/backend-spec.md` §16.
