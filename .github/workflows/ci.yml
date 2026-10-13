@@ -11,7 +11,7 @@ concurrency:
 
 jobs:
   changes:
-    runs-on: ubuntu-26.04
+    runs-on: ubuntu-latest
     permissions:
       pull-requests: read
     outputs:
@@ -46,7 +46,7 @@ jobs:
   server:
     needs: changes
     if: needs.changes.outputs.server == 'true'
-    runs-on: ubuntu-26.04
+    runs-on: ubuntu-latest
     services:
       postgres:
         # Same credentials as server/.env.test, which the tests read.
@@ -82,7 +82,7 @@ jobs:
   client:
     needs: changes
     if: needs.changes.outputs.client == 'true'
-    runs-on: ubuntu-26.04
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -98,7 +98,7 @@ jobs:
   ci-ok:
     if: always()
     needs: [changes, server, client]
-    runs-on: ubuntu-26.04
+    runs-on: ubuntu-latest
     steps:
       - name: Fail if any job failed or was cancelled
         if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
