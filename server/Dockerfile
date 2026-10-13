@@ -45,5 +45,5 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD wget -qO- http://127.0.0.1:3000/health >/dev/null || exit 1
 
-# Render's free plan has no pre-deploy step, so migrations run on start (prisma migrate deploy, then the server).
+# Cloud Run has no pre-deploy step, so migrations run on start (prisma migrate deploy, then the server).
 CMD ["npm", "run", "start:prod"]

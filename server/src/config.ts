@@ -6,7 +6,7 @@ const envSchema = z.object({
   DATABASE_URL: z.string().min(1),
   JWT_SECRET: z.string().min(16),
   CORS_ORIGIN: z.string().default('http://localhost:5173'),
-  // Proxies in front of Express (Vercel + Render in production). Used for the client IP.
+  // Proxies in front of Express (Vercel + Google Front End in production). Used for the client IP.
   TRUST_PROXY_HOPS: z.coerce.number().int().min(0).default(0),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
 });

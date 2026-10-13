@@ -16,6 +16,7 @@ jobs:
       pull-requests: read
     outputs:
       server: ${{ steps.filter.outputs.server }}
+      deploy-api: ${{ steps.filter.outputs.deploy-api }}
       client: ${{ steps.filter.outputs.client }}
     steps:
       - uses: actions/checkout@v4
@@ -28,6 +29,12 @@ jobs:
               - '.dockerignore'
               - 'shared/**'
               - 'package-lock.json'
+            deploy-api:
+              - 'server/**'
+              - '.dockerignore'
+              - 'shared/**'
+              - 'package*.json'
+              - '.github/workflows/deploy-api.yml'
             client:
               - 'client/**'
               - 'shared/**'
@@ -94,3 +101,12 @@ jobs:
         if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
         run: exit 1
       - run: echo "All required jobs passed or were skipped."
+
+  # Backend CD: deploy to Cloud Run after every required check passed on main (backend-spec §15).
+  deploy-api:
+    needs: [changes, ci-ok]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.changes.outputs.deploy-api == 'true'
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/deploy-api.yml

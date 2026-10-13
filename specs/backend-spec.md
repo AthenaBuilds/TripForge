@@ -155,7 +155,10 @@ All pipelines run on **GitHub Actions**. The repo is a monorepo (`/client`, `/se
 - Dependencies are cached through `actions/setup-node` (npm cache). Node 24 everywhere: CI (`node-version: 24`), the Docker image, Vercel builds, and `engines.node: ">=24 <25"` in the root `package.json`, plus an `.nvmrc` file.
 
 **Backend CD — `.github/workflows/deploy-api.yml` (Cloud Run)**
-- **Trigger:** `workflow_run` on CI completing for a push to `main`. The deploy job runs only when CI concluded `success` and the commit changed `server/**`, `shared/**`, `package*.json`, or the workflow file. It also has a manual `workflow_dispatch` trigger. Concurrency group `deploy-api` (no cancel-in-progress) so deploys never overlap.
+- **Trigger:** a `deploy-api` job at the end of `ci.yml` calls the reusable workflow `deploy-api.yml`.
+  - It runs only on a push to `main`, only after `ci-ok` passes, and only when the commit changed `server/**`, `shared/**`, `.dockerignore`, `package*.json`, or the deploy workflow itself.
+  - `deploy-api.yml` can also be started by hand (`workflow_dispatch`).
+  - The concurrency group `deploy-api` (without cancel-in-progress) keeps deploys from overlapping.
 - **Auth: Workload Identity Federation (keyless).** No service-account JSON key exists anywhere.
   - A workload identity pool `github` with an OIDC provider for `token.actions.githubusercontent.com`. Its attribute condition limits it to `assertion.repository == 'AthenaBuilds/TripForge'` and `assertion.ref == 'refs/heads/main'`.
   - That provider may impersonate one deployer service account, `tripforge-deployer@…`, which has:
@@ -178,7 +181,7 @@ All pipelines run on **GitHub Actions**. The repo is a monorepo (`/client`, `/se
 
 **Secrets**
 - `DATABASE_URL`, `DIRECT_URL`, and `JWT_SECRET` live only in GCP Secret Manager. `JWT_SECRET` is newly generated for Cloud Run, so every user signs in once more after cutover.
-- GitHub stores no deploy secrets. The WIF provider resource name, the deployer service-account email, the project ID, and the region are stored as repository **variables**, because none of them are secret.
+- GitHub stores no deploy secrets. The WIF provider resource name, the deployer service-account email, the project ID, the region, `CORS_ORIGIN`, and `TRUST_PROXY_HOPS` are stored as repository **variables**, because none of them are secret.
 
 ## 16. Known Limitations
 - PDF export uses the built-in Helvetica font (WinAnsi encoding), so non-Latin text (e.g. Devanagari, CJK) does not render. Fixing this needs an embedded Unicode font.
