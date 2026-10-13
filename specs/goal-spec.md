@@ -89,6 +89,8 @@ Since this is a learning/portfolio project, success is measured by delivery and 
 - **2026-10-14: Cutover to Cloud Run complete.** Vercel now proxies to Cloud Run; end-to-end tests A–H passed. `TRUST_PROXY_HOPS` measured as `2`. Render service and `render.yaml` removed.
   - Lessons from the first deploys, now in backend-spec §14–15: each GitHub variable must be separate with no padding; secrets hold the bare `postgresql://` URL; the budget must be in the billing currency (INR); 5 images would exceed the free storage, so the registry keeps 2; the setup is now `scripts/gcp-setup.sh`.
 
+- **2026-10-14: GitHub Actions on Node 24 and checked on Ubuntu 26.04.** Node 20 actions are deprecated and `ubuntu-latest` moves to Ubuntu 26.04 on 2026-10-19. All actions moved to their Node 24 majors. The full CI ran on `ubuntu-26.04` in the PR before switching back to `ubuntu-latest`, so the switch needs no action (backend-spec §15).
+
 ## 11. Open Questions
 <!-- Unresolved decisions to track. -->
 - None currently. Resolved decisions are logged in goal-spec.md §10.

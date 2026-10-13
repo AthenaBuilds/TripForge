@@ -11,7 +11,7 @@ concurrency:
 
 jobs:
   changes:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     permissions:
       pull-requests: read
     outputs:
@@ -19,8 +19,8 @@ jobs:
       deploy-api: ${{ steps.filter.outputs.deploy-api }}
       client: ${{ steps.filter.outputs.client }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: dorny/paths-filter@v3
+      - uses: actions/checkout@v7
+      - uses: dorny/paths-filter@v4
         id: filter
         with:
           filters: |
@@ -29,6 +29,7 @@ jobs:
               - '.dockerignore'
               - 'shared/**'
               - 'package-lock.json'
+              - '.github/workflows/ci.yml'
             deploy-api:
               - 'server/**'
               - '.dockerignore'
@@ -40,11 +41,12 @@ jobs:
               - 'client/**'
               - 'shared/**'
               - 'package-lock.json'
+              - '.github/workflows/ci.yml'
 
   server:
     needs: changes
     if: needs.changes.outputs.server == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     services:
       postgres:
         # Same credentials as server/.env.test, which the tests read.
@@ -63,8 +65,8 @@ jobs:
     env:
       DATABASE_URL: postgresql://tripforge:tripforge@localhost:5432/tripforge_test
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: npm
@@ -80,10 +82,10 @@ jobs:
   client:
     needs: changes
     if: needs.changes.outputs.client == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: npm
@@ -96,7 +98,7 @@ jobs:
   ci-ok:
     if: always()
     needs: [changes, server, client]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - name: Fail if any job failed or was cancelled
         if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
