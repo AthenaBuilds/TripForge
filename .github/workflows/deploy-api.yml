@@ -44,7 +44,7 @@ jobs:
           gcloud run deploy "$SERVICE" \
             --project="$PROJECT_ID" --region="$REGION" --image="$IMAGE" \
             --service-account="tripforge-run@$PROJECT_ID.iam.gserviceaccount.com" \
-            --allow-unauthenticated --ingress=all \
+            --ingress=all \
             --port=3000 --cpu=1 --memory=512Mi --concurrency=80 \
             --min-instances=0 --max-instances=2 --cpu-throttling --cpu-boost \
             --startup-probe=httpGet.path=/health,initialDelaySeconds=0,periodSeconds=5,failureThreshold=24,timeoutSeconds=3 \
