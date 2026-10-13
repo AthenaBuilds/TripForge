@@ -21,7 +21,7 @@ export function createApp({
   rateLimits = { credentials: 10, shared: 60, general: 100 },
 }: AppOptions = {}) {
   const app = express();
-  // Requests arrive through Vercel and API Gateway. Trust exactly that many X-Forwarded-* hops,
+  // Requests arrive through Vercel and Google's front end. Trust exactly that many X-Forwarded-* hops,
   // so clients can't spoof their IP to dodge rate limits.
   app.set('trust proxy', config.TRUST_PROXY_HOPS);
 

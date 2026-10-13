@@ -22,7 +22,7 @@ Built spec-first: the goal, frontend, backend, and API-contract specs in [`specs
 Browser ──► Vercel (React SPA)
               │  /api/* rewrite (same-origin, so the session cookie is first-party)
               ▼
-            Render (Express API in Docker, Singapore)
+            Cloud Run (Express API in Docker, Singapore)
               │  Prisma + pg adapter, TLS
               ▼
             Neon (PostgreSQL 16, Singapore)
@@ -60,9 +60,9 @@ Checks: `npm run lint`, `npm run typecheck`, `npm test`, `npm run build`.
 
 ## Deployment
 
-- API: Render free web service built from `server/Dockerfile`, defined in `render.yaml`. It auto-deploys from `main` after CI passes.
-- Database: Neon Postgres 16. Set `DATABASE_URL` (pooled) and `DIRECT_URL` (direct, for migrations) in Render.
-- Frontend: Vercel (Root Directory `client`); `client/vercel.json` proxies `/api` to the Render URL.
+- API: Google Cloud Run (`asia-southeast1`), built from `server/Dockerfile`. CI deploys it from `main` after `ci-ok` passes (`.github/workflows/deploy-api.yml`, keyless via Workload Identity Federation).
+- Database: Neon Postgres 16. `DATABASE_URL` (pooled) and `DIRECT_URL` (direct, for migrations) live in GCP Secret Manager.
+- Frontend: Vercel (Root Directory `client`); `client/vercel.json` proxies `/api` to the Cloud Run URL.
 
 Every change goes through a pull request; the `ci-ok` check gates merges and both deploys.
 
