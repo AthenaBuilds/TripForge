@@ -63,6 +63,7 @@ Checks: `npm run lint`, `npm run typecheck`, `npm test`, `npm run build`.
 - API: Google Cloud Run (`asia-southeast1`), built from `server/Dockerfile`. CI deploys it from `main` after `ci-ok` passes (`.github/workflows/deploy-api.yml`, keyless via Workload Identity Federation).
 - Database: Neon Postgres 16. `DATABASE_URL` (pooled) and `DIRECT_URL` (direct, for migrations) live in GCP Secret Manager.
 - Frontend: Vercel (Root Directory `client`); `client/vercel.json` proxies `/api` to the Cloud Run URL.
+- One-time GCP setup (APIs, service accounts, registry, IAM, WIF, secrets, budget): `scripts/gcp-setup.sh`, run by a project owner. Re-run it to rotate the Neon URLs.
 
 Every change goes through a pull request; the `ci-ok` check gates merges and both deploys.
 

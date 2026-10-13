@@ -23,7 +23,7 @@ A REST API server that owns all persistent TripForge data. It handles user signu
   - `middleware/` — `requireAuth` (verifies the JWT cookie and sets `req.user`), `errorHandler`, request logging.
   - `export/` — PDF and Excel generators that take a trip with its items and return a buffer.
 - **Modules:** `auth`, `trips`, `items`, `export`.
-- The repo layout is planned as a monorepo: `/client` (frontend), `/server` (backend), `/specs`.
+- The repo is an npm-workspaces monorepo: `/client` (frontend), `/server` (backend), `/shared` (Zod schemas, date helpers and error codes used by both), `/specs`, `/scripts` (test-DB and GCP setup scripts), and `.github/workflows`.
 
 ## 4. Data Model
 <!-- Entities, relationships, key fields. Link to ER diagram if available. -->
@@ -124,17 +124,19 @@ A REST API server that owns all persistent TripForge data. It handles user signu
     - 1 vCPU, 512 MiB, concurrency 80, request-based billing (CPU only while handling requests), and startup CPU boost.
     - Startup probe: HTTP `GET /health`.
   - A dedicated runtime service account `tripforge-run@…` holds only `roles/secretmanager.secretAccessor` on the three app secrets. It is not the default compute service account.
-  - **Artifact Registry**: a Docker repo `tripforge` in `asia-southeast1`. Images are tagged with the git commit SHA. A cleanup policy keeps the newest 5 images so storage stays under the 0.5 GB free allowance.
+  - **Artifact Registry**: a Docker repo `tripforge` in `asia-southeast1`. Images are tagged with the git commit SHA. A cleanup policy keeps the newest **2** images (the live one plus one rollback target). Each image is about 176 MB, so 2 images (~350 MB) stay under the 0.5 GB free allowance, while 5 would not.
   - **Secret Manager** holds `DATABASE_URL`, `DIRECT_URL`, and `JWT_SECRET`, mounted as environment variables. Non-secret settings (`NODE_ENV`, `LOG_LEVEL`, `TRUST_PROXY_HOPS`, `CORS_ORIGIN`) are plain environment variables set at deploy.
   - **Neon** (free plan, Singapore) hosts PostgreSQL 16, unchanged from the Render setup. Two connection strings:
     - `DATABASE_URL`: the **pooled** URL (PgBouncer, `-pooler` host), used by the app at runtime.
-    - `DIRECT_URL`: the **direct** URL, used only by `prisma migrate deploy` (migrations need a direct session). Both use `sslmode=require`.
+    - `DIRECT_URL`: the **direct** URL, used only by `prisma migrate deploy` (migrations need a direct session). Both use `sslmode=require&channel_binding=require`.
+    - Each secret holds only the bare `postgresql://…` URL. Neon's "psql" copy button wraps it as `psql '…'`, which Prisma rejects (P1013) and which made the first Cloud Run revision fail to start; `scripts/gcp-setup.sh` strips that wrapper.
   - Migrations still run at container start (`npm run start:prod` = `prisma migrate deploy`, then `node dist/index.js`). If a migration fails, the new revision fails its startup probe and Cloud Run keeps serving the previous revision. Prisma's migration lock makes it safe if two instances start at once.
   - Logs: Cloud Logging collects the pino JSON logs from stdout. Severity is read from the JSON.
 - Cold starts: a scaled-to-zero instance starts in a few seconds (container start, plus Neon waking from autosuspend, about 1 s). This replaces Render's 30–60 s.
 - **Cost guardrails.** Expected cost is $0 a month within the free tier: 2M requests, 180k vCPU-seconds, and 360k GiB-seconds per billing account per month, plus 0.5 GB of Artifact Registry storage and 6 active secret versions.
+  - Only the latest version of each of the 3 secrets stays enabled. After a rotation and a successful redeploy, older versions are destroyed, so active versions stay at 3.
   - The max-instances cap of `2` limits how far a traffic spike can scale.
-  - A **Cloud Billing budget of $5 a month** sends email alerts at 50%, 90%, and 100%.
+  - A **Cloud Billing budget of ₹450 a month (about $5)** sends email alerts at 50%, 90%, and 100%. The amount is in INR because a budget must use the billing account's currency.
   - Min instances is never raised above 0, because an always-on instance is billed continuously.
 - Portability: the image stays cloud-neutral, so only the deploy config changes if the API moves again.
 - CI/CD details are in §15.
@@ -149,7 +151,7 @@ All pipelines run on **GitHub Actions**. The repo is a monorepo (`/client`, `/se
 **CI — `.github/workflows/ci.yml`** (runs on every pull request and every push to `main`)
 | Job | Runs when these paths change | Steps |
 |-----|------------------------------|-------|
-| `server` | `server/**`, `shared/**` | install → lint → type-check → `prisma migrate deploy` against a Postgres service container → Vitest (unit + Supertest integration) → build → production Docker image build |
+| `server` | `server/**`, `shared/**`, `.dockerignore`, `package-lock.json` | install → lint → type-check → `prisma migrate deploy` against a Postgres service container → Vitest (unit + Supertest integration) → build → production Docker image build |
 | `client` | `client/**`, `shared/**` | install → lint → type-check → Vitest + React Testing Library → `vite build` |
 | `ci-ok` | always | Gate job that passes only when every job above passed or was skipped. Branch protection requires only this check, so path filtering doesn't block merges. |
 
@@ -157,9 +159,11 @@ All pipelines run on **GitHub Actions**. The repo is a monorepo (`/client`, `/se
 
 **Backend CD — `.github/workflows/deploy-api.yml` (Cloud Run)**
 - **Trigger:** a `deploy-api` job at the end of `ci.yml` calls the reusable workflow `deploy-api.yml`.
-  - It runs only on a push to `main`, only after `ci-ok` passes, and only when the commit changed `server/**`, `shared/**`, `.dockerignore`, `package*.json`, or the deploy workflow itself.
+  - It runs only on a push to `main`, only after `ci-ok` passes, and only when the commit changed `server/**`, `shared/**`, `.dockerignore`, `package*.json`, `.github/workflows/deploy-api.yml`, or `.github/workflows/ci.yml`.
+  - Its `if:` starts with `always() && needs.ci-ok.result == 'success'`. Without `always()`, the implicit `success()` also checks indirect dependencies, so a skipped `client` job would skip the deploy even though `ci-ok` passed.
   - `deploy-api.yml` can also be started by hand (`workflow_dispatch`).
   - The concurrency group `deploy-api` (without cancel-in-progress) keeps deploys from overlapping.
+- **One-time setup: `scripts/gcp-setup.sh`**, run by a project owner. It is idempotent and holds no secrets. It enables the APIs and creates the service accounts, the Artifact Registry repo and its cleanup policy, the IAM grants, WIF, the secrets (from hidden prompts), and the budget. It then prints the GitHub variables to add and the one-time public-access grant to run after the first deploy. Re-run it to rotate the Neon URLs.
 - **Auth: Workload Identity Federation (keyless).** No service-account JSON key exists anywhere.
   - A workload identity pool `github` with an OIDC provider for `token.actions.githubusercontent.com`. Its attribute condition limits it to `assertion.repository == 'AthenaBuilds/TripForge'` and `assertion.ref == 'refs/heads/main'`.
   - That provider may impersonate one deployer service account, `tripforge-deployer@…`, which has:
@@ -183,6 +187,7 @@ All pipelines run on **GitHub Actions**. The repo is a monorepo (`/client`, `/se
 **Secrets**
 - `DATABASE_URL`, `DIRECT_URL`, and `JWT_SECRET` live only in GCP Secret Manager. `JWT_SECRET` is newly generated for Cloud Run, so every user signs in once more after cutover.
 - GitHub stores no deploy secrets. The WIF provider resource name, the deployer service-account email, the project ID, the region, `CORS_ORIGIN`, and `TRUST_PROXY_HOPS` are stored as repository **variables**, because none of them are secret.
+- Each is a separate variable whose name is exactly the key and whose value has no surrounding spaces. A single combined variable left `GCP_WIF_PROVIDER` empty, and a leading space in `GCP_PROJECT_ID` produced an invalid image tag.
 
 ## 16. Known Limitations
 - PDF export uses the built-in Helvetica font (WinAnsi encoding), so non-Latin text (e.g. Devanagari, CJK) does not render. Fixing this needs an embedded Unicode font.

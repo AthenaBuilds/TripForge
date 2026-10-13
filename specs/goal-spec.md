@@ -55,7 +55,7 @@ Since this is a learning/portfolio project, success is measured by delivery and 
 
 ## 9. Milestones / Phasing
 <!-- MVP vs later phases, if applicable. -->
-- **Phase 1 (MVP)** — ✅ **shipped 2026-10-12**, live at https://tripforge-alpha.vercel.app (all manual test scenarios A–H passed): Create trip, add/edit/remove itinerary items, view itinerary, and share it read-only via a link — responsive on desktop and mobile. Basic auth (single user owns their trips).
+- **Phase 1 (MVP)** — ✅ **shipped 2026-10-12**, live at https://tripforge-alpha.vercel.app (all manual test scenarios A–H passed): Create trip, add/edit/remove itinerary items, view itinerary, and share it read-only via a link — responsive on desktop and mobile. Basic auth (single user owns their trips). On 2026-10-14 the API moved from Render to Google Cloud Run, and A–H passed again on the new stack.
 - **Phase 2 (stretch, if time allows)**: Basic trip list/dashboard polish.
 - **Future / explicitly deferred**: Collaboration, budgeting, recommendations, notifications (see Non-Goals).
 
@@ -72,7 +72,7 @@ Since this is a learning/portfolio project, success is measured by delivery and 
 - **2026-10-12 — Production hosting: Render + Neon instead of AWS:** the AWS account and the GCP billing account were both still waiting on activation, so the MVP deploys on free tiers that need no card: the API on a Render free web service (Docker, Singapore) and Postgres 16 on Neon free. Accepted trade-off: cold starts of ~30–60 s after idle. The Docker image stays cloud-neutral, so moving to AWS or GCP later only changes deploy config (backend-spec.md §14–15).
 - **2026-10-13 — Production API moves from Render to Google Cloud Run:** in a test, the Render free service took ~46 s to answer after idle and 0.3 s when warm, which made the site feel broken. The GCP billing account is now active.
   - Setup: the API runs on Cloud Run in the existing project, region `asia-southeast1` (beside Neon). It scales to zero with at most 2 instances. Deploys come from GitHub Actions using keyless Workload Identity Federation, and secrets are in Secret Manager. Neon and Vercel are unchanged.
-  - Expected cost is $0 a month within the free tier, guarded by the instance cap, an Artifact Registry cleanup policy, and a $5 budget alert.
+  - Expected cost is $0 a month within the free tier, guarded by the instance cap, an Artifact Registry cleanup policy, and a ₹450 (about $5) budget alert.
   - Alternatives rejected:
     - Keeping Render with a GitHub Actions keep-alive ping: it is unreliable, because scheduled runs are delayed, and it goes against the spirit of Render's free plan.
     - GitHub Pages: it serves static files only and can't run the API.
@@ -87,6 +87,7 @@ Since this is a learning/portfolio project, success is measured by delivery and 
 - **2026-10-13: Cloud Run public access is a one-time owner grant.** The deployer only has `roles/run.developer`, which cannot set IAM, so `--allow-unauthenticated` in the deploy was being denied. The workflow no longer passes it; the owner grants `allUsers` `roles/run.invoker` once after the first deploy. This keeps the deployer least-privilege (backend-spec §14).
 
 - **2026-10-14: Cutover to Cloud Run complete.** Vercel now proxies to Cloud Run; end-to-end tests A–H passed. `TRUST_PROXY_HOPS` measured as `2`. Render service and `render.yaml` removed.
+  - Lessons from the first deploys, now in backend-spec §14–15: each GitHub variable must be separate with no padding; secrets hold the bare `postgresql://` URL; the budget must be in the billing currency (INR); 5 images would exceed the free storage, so the registry keeps 2; the setup is now `scripts/gcp-setup.sh`.
 
 ## 11. Open Questions
 <!-- Unresolved decisions to track. -->
