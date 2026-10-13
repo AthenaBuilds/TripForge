@@ -86,6 +86,8 @@ Since this is a learning/portfolio project, success is measured by delivery and 
 
 - **2026-10-13: Cloud Run public access is a one-time owner grant.** The deployer only has `roles/run.developer`, which cannot set IAM, so `--allow-unauthenticated` in the deploy was being denied. The workflow no longer passes it; the owner grants `allUsers` `roles/run.invoker` once after the first deploy. This keeps the deployer least-privilege (backend-spec §14).
 
+- **2026-10-14: Cutover to Cloud Run complete.** Vercel now proxies to Cloud Run; end-to-end tests A–H passed. `TRUST_PROXY_HOPS` measured as `2`. Render service and `render.yaml` removed.
+
 ## 11. Open Questions
 <!-- Unresolved decisions to track. -->
 - None currently. Resolved decisions are logged in goal-spec.md §10.
