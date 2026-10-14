@@ -90,6 +90,7 @@ Since this is a learning/portfolio project, success is measured by delivery and 
   - Lessons from the first deploys, now in backend-spec §14–15: each GitHub variable must be separate with no padding; secrets hold the bare `postgresql://` URL; the budget must be in the billing currency (INR); 5 images would exceed the free storage, so the registry keeps 2; the setup is now `scripts/gcp-setup.sh`.
 
 - **2026-10-14: GitHub Actions on Node 24 and checked on Ubuntu 26.04.** Node 20 actions are deprecated and `ubuntu-latest` moves to Ubuntu 26.04 on 2026-10-19. All actions moved to their Node 24 majors. The full CI ran on `ubuntu-26.04` in the PR before switching back to `ubuntu-latest`, so the switch needs no action (backend-spec §15).
+- **2026-10-14: Faster first visit after idle.** A visitor after idle saw a full-page "Loading" spinner for ~15 s: the Welcome page waited on `GET /auth/me`, and a cold Cloud Run start spent ~5 s on `prisma migrate deploy` and up to 5 s waiting on a 5 s startup probe. Now the Welcome page renders without waiting (frontend-spec §10), migrations run once per deploy as the Cloud Run job `tripforge-migrate`, the image starts `node` directly, and the probe runs every 2 s with a 1 s timeout (backend-spec §14–15). Measured cold start: ~5–6 s; A–H passed. Rejected: `min-instances=1` (removes cold starts but costs money every month, against the ₹450 budget).
 
 ## 11. Open Questions
 <!-- Unresolved decisions to track. -->

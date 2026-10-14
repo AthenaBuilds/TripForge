@@ -2,7 +2,7 @@
 
 Plan trips with shared day-by-day itineraries.
 
-**Live:** https://tripforge-alpha.vercel.app (the API scales to zero, so the first request after idle takes a few seconds while it starts).
+**Live:** https://tripforge-alpha.vercel.app (the API scales to zero, so after idle the first API call takes about 5–6 s while it starts; the Welcome page shows without waiting).
 
 Built spec-first: the goal, frontend, backend, and API-contract specs in [`specs/`](specs/) are the source of truth, and every behavior change updates them before code. Decisions are logged in [`specs/goal-spec.md`](specs/goal-spec.md) §10.
 
@@ -57,7 +57,7 @@ npm run dev -w @tripforge/client   # SPA on :5173, proxies /api -> :3000
 Server tests use `server/.env.test` (the `tripforge_test` db) and truncate it, never your dev db.
 
 Production image (API): `docker build -f server/Dockerfile -t tripforge-api .` from the repo root.
-The image applies pending migrations on start (`npm run start:prod`), then starts the API.
+The image only starts the API (`node dist/index.js`); it does not run migrations. In production the deploy runs them first (see below); for a local container run `npm run db:deploy -w @tripforge/server` against its database.
 
 Checks: `npm run lint`, `npm run typecheck`, `npm test`, `npm run build`.
 
@@ -77,7 +77,7 @@ The browser only talks to Vercel: `client/vercel.json` rewrites `/api/*` to the 
 2. Merge to `main`.
    - **API:** if `server/`, `shared/`, package files or the workflows changed, CI calls `deploy-api.yml` after `ci-ok` passes. It signs in to GCP with Workload Identity Federation (no stored keys), builds `server/Dockerfile`, pushes the image to Artifact Registry tagged with the commit SHA, deploys it to Cloud Run, and fails unless `/health` returns 200.
    - **Frontend:** Vercel builds `client/` and promotes it after `ci-ok` passes.
-3. Migrations run when the new container starts (`prisma migrate deploy`). A revision that fails to start never gets traffic, so the previous one keeps serving.
+3. Migrations run once per deploy, before the new revision: the same image runs as the Cloud Run job `tripforge-migrate` (`prisma migrate deploy`). If it fails, the deploy stops. A revision that fails to start never gets traffic, so the previous one keeps serving.
 
 Redeploy by hand: **Actions → Deploy API → Run workflow** (branch `main`).
 

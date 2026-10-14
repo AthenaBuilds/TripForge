@@ -122,7 +122,7 @@ A REST API server that owns all persistent TripForge data. It handles user signu
     - That invoker grant is a one-time step by the project owner, not part of the deploy: the deployer's `roles/run.developer` cannot change IAM, and should not be able to.
     - Min instances `0` (scale to zero, so it stays in the free tier) and max instances `2` (a hard cap on cost and on Neon connections).
     - 1 vCPU, 512 MiB, concurrency 80, request-based billing (CPU only while handling requests), and startup CPU boost.
-    - Startup probe: HTTP `GET /health`.
+    - Startup probe: HTTP `GET /health` every 2 s with a 1 s timeout, up to 60 attempts (2 minutes). Cloud Run requires the timeout to be below the period, so 2 s is the shortest valid period. It was 5 s, which left a ready instance waiting up to 5 s for traffic.
   - A dedicated runtime service account `tripforge-run@…` holds only `roles/secretmanager.secretAccessor` on the three app secrets. It is not the default compute service account.
   - **Artifact Registry**: a Docker repo `tripforge` in `asia-southeast1`. Images are tagged with the git commit SHA. A cleanup policy keeps the newest **2** images (the live one plus one rollback target). Each image is about 176 MB, so 2 images (~350 MB) stay under the 0.5 GB free allowance, while 5 would not.
   - **Secret Manager** holds `DATABASE_URL`, `DIRECT_URL`, and `JWT_SECRET`, mounted as environment variables. Non-secret settings (`NODE_ENV`, `LOG_LEVEL`, `TRUST_PROXY_HOPS`, `CORS_ORIGIN`) are plain environment variables set at deploy.
@@ -130,9 +130,9 @@ A REST API server that owns all persistent TripForge data. It handles user signu
     - `DATABASE_URL`: the **pooled** URL (PgBouncer, `-pooler` host), used by the app at runtime.
     - `DIRECT_URL`: the **direct** URL, used only by `prisma migrate deploy` (migrations need a direct session). Both use `sslmode=require&channel_binding=require`.
     - Each secret holds only the bare `postgresql://…` URL. Neon's "psql" copy button wraps it as `psql '…'`, which Prisma rejects (P1013) and which made the first Cloud Run revision fail to start; `scripts/gcp-setup.sh` strips that wrapper.
-  - Migrations still run at container start (`npm run start:prod` = `prisma migrate deploy`, then `node dist/index.js`). If a migration fails, the new revision fails its startup probe and Cloud Run keeps serving the previous revision. Prisma's migration lock makes it safe if two instances start at once.
+  - Migrations run **once per deploy**, not at container start: the deploy workflow runs the same image as the Cloud Run job `tripforge-migrate` (`npm run db:deploy` = `prisma migrate deploy`, runtime service account, `DATABASE_URL`/`DIRECT_URL` secrets, no retries) and waits for it before deploying the service. If the job fails, the deploy stops and the previous revision keeps serving. The image `CMD` is `node dist/index.js` directly (no npm wrapper), so a cold start only boots the server.
   - Logs: Cloud Logging collects the pino JSON logs from stdout. Severity is read from the JSON.
-- Cold starts: a scaled-to-zero instance starts in a few seconds (container start, plus Neon waking from autosuspend, about 1 s). This replaces Render's 30–60 s.
+- Cold starts: a scaled-to-zero instance is ready in about 5–6 s (measured 2026-10-14; it was ~15 s when migrations ran at start and the probe ran every 5 s). Neon waking from autosuspend adds about 1–3 s to the first database query after idle. This replaces Render's 30–60 s.
 - **Cost guardrails.** Expected cost is $0 a month within the free tier: 2M requests, 180k vCPU-seconds, and 360k GiB-seconds per billing account per month, plus 0.5 GB of Artifact Registry storage and 6 active secret versions.
   - Only the latest version of each of the 3 secrets stays enabled. After a rotation and a successful redeploy, older versions are destroyed, so active versions stay at 3.
   - The max-instances cap of `2` limits how far a traffic spike can scale.
@@ -175,9 +175,10 @@ All pipelines run on **GitHub Actions**. The repo is a monorepo (`/client`, `/se
 - **Steps:**
   1. `google-github-actions/auth`.
   2. Build `server/Dockerfile` and push it to Artifact Registry, tagged with the commit SHA.
-  3. `gcloud run deploy` with the settings in §14.
-  4. Smoke test: `curl` the new revision's `/health` and fail the job if it doesn't return 200.
-- **Rollback:** `gcloud run services update-traffic tripforge-api --to-revisions=<previous>=100`, or the Cloud Run console. A revision that fails its startup probe never receives traffic.
+  3. Run migrations: `gcloud run jobs deploy tripforge-migrate --execute-now --wait` with the new image (see §14). A failure stops the deploy.
+  4. `gcloud run deploy` with the settings in §14.
+  5. Smoke test: `curl` the new revision's `/health` and fail the job if it doesn't return 200.
+- **Rollback:** `gcloud run services update-traffic tripforge-api --to-revisions=<previous>=100`, or the Cloud Run console. A revision that fails its startup probe never receives traffic. Migrations are expand-then-contract (below), so the previous revision still works against the migrated schema.
 
 **Frontend CD** is handled by Vercel (see frontend-spec.md §13). Vercel waits for the GitHub `ci-ok` check before promoting a production deployment.
 
