@@ -39,6 +39,19 @@ jobs:
           docker build -f server/Dockerfile -t "$IMAGE" .
           docker push "$IMAGE"
 
+      # Migrations run once per deploy (not on every cold start), before the new revision serves.
+      # Same image, run as a Cloud Run job; a failed migration stops the deploy.
+      - name: Run migrations
+        run: |
+          gcloud run jobs deploy tripforge-migrate \
+            --project="$PROJECT_ID" --region="$REGION" --image="$IMAGE" \
+            --service-account="tripforge-run@$PROJECT_ID.iam.gserviceaccount.com" \
+            --command=npm --args=run,db:deploy \
+            --cpu=1 --memory=512Mi --max-retries=0 --task-timeout=300s \
+            --set-env-vars="NODE_ENV=production" \
+            --set-secrets="DATABASE_URL=DATABASE_URL:latest,DIRECT_URL=DIRECT_URL:latest" \
+            --execute-now --wait --quiet
+
       - name: Deploy to Cloud Run
         run: |
           gcloud run deploy "$SERVICE" \
@@ -47,7 +60,7 @@ jobs:
             --ingress=all \
             --port=3000 --cpu=1 --memory=512Mi --concurrency=80 \
             --min-instances=0 --max-instances=2 --cpu-throttling --cpu-boost \
-            --startup-probe=httpGet.path=/health,initialDelaySeconds=0,periodSeconds=5,failureThreshold=24,timeoutSeconds=3 \
+            --startup-probe=httpGet.path=/health,initialDelaySeconds=0,periodSeconds=1,failureThreshold=120,timeoutSeconds=3 \
             --set-env-vars="NODE_ENV=production,LOG_LEVEL=info,TRUST_PROXY_HOPS=${{ vars.TRUST_PROXY_HOPS }},CORS_ORIGIN=${{ vars.CORS_ORIGIN }}" \
             --set-secrets="DATABASE_URL=DATABASE_URL:latest,DIRECT_URL=DIRECT_URL:latest,JWT_SECRET=JWT_SECRET:latest" \
             --quiet

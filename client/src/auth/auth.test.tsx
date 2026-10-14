@@ -1,5 +1,5 @@
 import { screen, waitFor } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { loggedIn, loggedOut, mockApi, renderApp, testUser } from '../test/render';
 
 const location = () => screen.getByTestId('location').textContent;
@@ -24,6 +24,14 @@ describe('ProtectedRoute', () => {
     mockApi({ ...loggedIn, 'GET /trips': { body: { trips: [] } } });
     renderApp('/');
     await waitFor(() => expect(location()).toBe('/trips'));
+  });
+
+  it('shows the Welcome page without waiting for a slow session check', async () => {
+    // GET /auth/me never answers, like a cold-starting API.
+    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(() => {})));
+    renderApp('/');
+    expect(await screen.findByRole('button', { name: 'Log in' })).toBeInTheDocument();
+    expect(screen.queryByText('Loading')).not.toBeInTheDocument();
   });
 
   it('clears the session and returns to / when an API call gets 401', async () => {
