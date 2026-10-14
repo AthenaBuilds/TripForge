@@ -45,5 +45,6 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD wget -qO- http://127.0.0.1:3000/health >/dev/null || exit 1
 
-# Cloud Run has no pre-deploy step, so migrations run on start (prisma migrate deploy, then the server).
-CMD ["npm", "run", "start:prod"]
+# Migrations are not run here: deploy-api.yml runs them once per deploy as a Cloud Run job
+# (`npm run db:deploy`), so a cold start only boots the server. node directly, no npm wrapper.
+CMD ["node", "dist/index.js"]

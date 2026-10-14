@@ -1,6 +1,5 @@
 import { Navigate, useNavigate } from 'react-router';
 import { useAuth } from '../../auth/AuthContext';
-import { LoadingSpinner } from '../../components/LoadingSpinner';
 import { AuthForm } from './AuthForm';
 import { WelcomePanel } from './WelcomePanel';
 
@@ -8,7 +7,8 @@ export default function WelcomePage() {
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  if (user === undefined) return <LoadingSpinner label="Loading" fullPage />;
+  // Render straight away while the session check runs: after idle the API cold-starts, and a
+  // logged-out visitor should not wait on it. A restored session redirects when it arrives.
   if (user) return <Navigate to="/trips" replace />;
 
   return (
