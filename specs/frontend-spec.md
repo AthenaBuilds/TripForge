@@ -116,6 +116,7 @@ Exact request/response shapes are defined in api-contract-spec.md. All calls go 
 - Basic auth is required for the MVP — all `/trips*` routes are wrapped in `ProtectedRoute` and require a logged-in session. `/shared/:slug` is public.
 - Login/signup both live on the `/` Welcome page via `AuthForm` (toggle between modes) — there are no separate `/login`/`/signup` routes.
 - The session is a JWT in an **httpOnly cookie** set by the backend (see backend-spec.md §7). The frontend never reads or stores the token; it calls `GET /auth/me` on app load to restore the session into the auth Context.
+- The Welcome page (`/`) renders immediately while that check is in flight, and redirects to `/trips` when a session comes back. After idle the API cold-starts (backend-spec §14), and a logged-out visitor should not wait on it. Protected routes still show `LoadingSpinner` ("Restoring your session") until the check resolves, since they need the user.
 - On 401 responses, the frontend clears the session and redirects to `/`.
 - Logout clears session state and redirects to `/`.
 
