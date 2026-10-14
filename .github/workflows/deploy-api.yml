@@ -60,7 +60,7 @@ jobs:
             --ingress=all \
             --port=3000 --cpu=1 --memory=512Mi --concurrency=80 \
             --min-instances=0 --max-instances=2 --cpu-throttling --cpu-boost \
-            --startup-probe=httpGet.path=/health,initialDelaySeconds=0,periodSeconds=1,failureThreshold=120,timeoutSeconds=3 \
+            --startup-probe=httpGet.path=/health,initialDelaySeconds=0,periodSeconds=2,failureThreshold=60,timeoutSeconds=1 \
             --set-env-vars="NODE_ENV=production,LOG_LEVEL=info,TRUST_PROXY_HOPS=${{ vars.TRUST_PROXY_HOPS }},CORS_ORIGIN=${{ vars.CORS_ORIGIN }}" \
             --set-secrets="DATABASE_URL=DATABASE_URL:latest,DIRECT_URL=DIRECT_URL:latest,JWT_SECRET=JWT_SECRET:latest" \
             --quiet
